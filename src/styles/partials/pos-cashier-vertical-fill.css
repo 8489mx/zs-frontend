@@ -1,0 +1,216 @@
+/* POS cashier vertical fill
+   Scanner and touch modes should use the full viewport height without page-level vertical scroll.
+   The checkout/cart side stretches, while the payment dock stays aligned with the products panel bottom.
+   Internal scroll remains inside the cart items/products results only. */
+
+/* Global POS viewport resets (prevent any reserved scrollbar gutter from eating right margin) */
+html:has(.pos-workspace),
+html:has(.content-wrap-pos),
+body:has(.pos-workspace),
+body:has(.content-wrap-pos) {
+  scrollbar-gutter: auto !important;
+  overflow: hidden !important;
+}
+
+@media (min-width: 901px) {
+  .content-wrap:has(.pos-workspace),
+  .content-wrap.content-wrap-pos,
+  .content-wrap.content-wrap-pos-focus,
+  .app-layout.app-layout-pos .content-wrap,
+  .app-layout.app-layout-pos-focus .content-wrap {
+    overflow: hidden !important;
+    overscroll-behavior: contain !important;
+    scrollbar-gutter: auto !important;
+    padding-top: 4px !important;
+    padding-bottom: 0 !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* LTR (English mode): Sidebar on left, Unified 14px gutters matching Dashboard */
+  [dir="ltr"] .content-wrap:has(.pos-workspace),
+  [dir="ltr"] .content-wrap.content-wrap-pos,
+  html[dir="ltr"] .content-wrap:has(.pos-workspace),
+  html[dir="ltr"] .content-wrap.content-wrap-pos {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    padding-inline: 14px !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    margin-inline: 0 !important;
+  }
+
+  /* RTL (Arabic mode): Sidebar on right, Unified 14px gutters matching Dashboard */
+  [dir="rtl"] .content-wrap:has(.pos-workspace),
+  [dir="rtl"] .content-wrap.content-wrap-pos,
+  html[dir="rtl"] .content-wrap:has(.pos-workspace),
+  html[dir="rtl"] .content-wrap.content-wrap-pos {
+    padding-right: 14px !important;
+    padding-left: 14px !important;
+    padding-inline: 14px !important;
+    margin-right: 0 !important;
+    margin-left: 0 !important;
+    margin-inline: 0 !important;
+  }
+
+  /* Fullscreen / Focus Mode: No sidebar, flush to both edges */
+  .app-layout.app-layout-pos-focus .content-wrap,
+  .content-wrap.content-wrap-pos-focus {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-inline: 0 !important;
+    margin-inline: 0 !important;
+  }
+
+  .content-wrap:has(.pos-workspace) > .page-stack,
+  .content-wrap.content-wrap-pos > .page-stack,
+  .content-wrap.content-wrap-pos-focus > .page-stack,
+  .page-stack.page-stack-pos {
+    min-height: 0 !important;
+    height: calc(100dvh - 4px) !important;
+    max-height: calc(100dvh - 4px) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .pos-workspace {
+    height: calc(100dvh - 4px) !important;
+    max-height: calc(100dvh - 4px) !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    overflow: hidden !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-inline: 0 !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .pos-workspace .pos-page-header {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .pos-workspace .pos-grid-premium {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    align-self: stretch !important;
+    margin: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-inline: 0 !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .pos-workspace .pos-products-card,
+  .pos-workspace .pos-checkout-column,
+  .pos-workspace .pos-checkout-card {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    margin-bottom: 0 !important;
+    box-shadow: none !important;
+    border-bottom: none !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+  }
+
+  .pos-workspace .pos-products-card {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .pos-workspace .pos-products-static {
+    flex: 0 0 auto !important;
+  }
+
+  .pos-workspace.pos-sale-mode-scanner .pos-products-scroll,
+  .pos-workspace.pos-sale-mode-touch .pos-products-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 8px;
+  }
+
+  .pos-workspace.pos-sale-mode-scanner .pos-checkout-column,
+  .pos-workspace.pos-sale-mode-touch .pos-checkout-column,
+  .pos-workspace .pos-checkout-column {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+    height: 100% !important;
+  }
+
+  .pos-workspace.pos-sale-mode-scanner .pos-checkout-card,
+  .pos-workspace.pos-sale-mode-touch .pos-checkout-card,
+  .pos-workspace .pos-checkout-card {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
+    margin-bottom: 0 !important;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+  }
+
+  .pos-workspace.pos-sale-mode-scanner .pos-checkout-static,
+  .pos-workspace.pos-sale-mode-touch .pos-checkout-static {
+    flex: 0 0 auto;
+  }
+
+  .pos-workspace.pos-sale-mode-scanner .pos-checkout-scroll,
+  .pos-workspace.pos-sale-mode-touch .pos-checkout-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .pos-workspace.pos-sale-mode-scanner .pos-checkout-body,
+  .pos-workspace.pos-sale-mode-touch .pos-checkout-body {
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .pos-workspace.pos-sale-mode-scanner .pos-cart-table,
+  .pos-workspace.pos-sale-mode-touch .pos-cart-table {
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .pos-workspace.pos-sale-mode-scanner .pos-cart-table-body,
+  .pos-workspace.pos-sale-mode-touch .pos-cart-table-body {
+    max-height: none !important;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .pos-workspace.pos-sale-mode-scanner .pos-workspace-dock,
+  .pos-workspace.pos-sale-mode-touch .pos-workspace-dock {
+    align-self: end;
+    flex: 0 0 auto;
+  }
+}

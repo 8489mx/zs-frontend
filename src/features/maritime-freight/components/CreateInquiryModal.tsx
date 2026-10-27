@@ -1,0 +1,778 @@
+import { useTranslation } from 'react-i18next';
+import { useState, useEffect } from 'react';
+import { StandardDialog, StandardDialogFooter } from '@/shared/components/StandardDialog';
+import { Field } from '@/shared/ui/field';
+import { ComboboxSelect } from '@/shared/ui/ComboboxSelect';
+import { CustomSelect } from '@/shared/ui/custom-select';
+import { maritimeApi, ShippingPort } from '../api/maritime-freight.api';
+import { customersApi, Customer } from '@/features/customers/api/customers.api';
+import { AppIcons } from '@/shared/components/icons/AppIcons';
+import { useMaritime } from '../context/MaritimeContext';
+
+interface CreateInquiryModalProps {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (newInquiry: any) => void;
+}
+
+export function CreateInquiryModal({ open, onClose, onCreated }: CreateInquiryModalProps) {
+  const { t } = useTranslation();
+  const { pipelineConfig } = useMaritime();
+  const enableSeaFreight = pipelineConfig?.enableSeaFreight !== false;
+  const enableAirFreight = pipelineConfig?.enableAirFreight !== false;
+  const enableRoadFreight = pipelineConfig?.enableRoadFreight !== false;
+  const activeModesCount = (enableSeaFreight ? 1 : 0) + (enableAirFreight ? 1 : 0) + (enableRoadFreight ? 1 : 0);
+
+  const [ports, setPorts] = useState<ShippingPort[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [formData, setFormData] = useState({
+    transportMode: (enableSeaFreight ? 'sea' : enableAirFreight ? 'air' : 'road') as 'sea' | 'air' | 'road',
+    airCargoType: 'general',
+    customerName: '',
+    customerPhone: '',
+    customerEmail: '',
+    direction: 'import' as 'import' | 'export' | 'cross_trade',
+    polCode: 'CNSHA',
+    polName: 'ميناء شنغهاي - الصين',
+    podCode: 'EGALY',
+    podName: 'ميناء الإسكندرية - مصر',
+    incoterm: 'FOB',
+    cargoMode: 'FCL',
+    containerType: '40HC',
+    containerCount: 1,
+    commodityDescription: '',
+    cargoNature: 'general',
+    grossWeightKg: 0,
+    volumetricWeightKg: 0,
+    chargeableWeightKg: 0,
+    cbm: 0,
+    packageCount: 1,
+    cargoReadyDate: '',
+    targetDeliveryDate: '',
+    targetFreeDays: 14,
+    paymentTerm: 'prepaid' as 'prepaid' | 'collect',
+    notes: '',
+  });
+
+  useEffect(() => {
+    if (open) {
+      maritimeApi.getPorts().then(setPorts).catch(() => {});
+      customersApi.list().then((data) => {
+        if (Array.isArray(data)) setCustomers(data);
+      }).catch(() => {});
+
+      if (!enableSeaFreight && formData.transportMode === 'sea') {
+        if (enableAirFreight) handleModeChange('air');
+        else if (enableRoadFreight) handleModeChange('road');
+      } else if (!enableAirFreight && formData.transportMode === 'air') {
+        if (enableSeaFreight) handleModeChange('sea');
+        else if (enableRoadFreight) handleModeChange('road');
+      } else if (!enableRoadFreight && formData.transportMode === 'road') {
+        if (enableSeaFreight) handleModeChange('sea');
+        else if (enableAirFreight) handleModeChange('air');
+      }
+    }
+  }, [open, enableSeaFreight, enableAirFreight, enableRoadFreight]);
+
+  const handleModeChange = (mode: 'sea' | 'air' | 'road') => {
+    if (mode === 'air') {
+      const vol = Math.round(Number(formData.cbm || 0) * 166.667 * 10) / 10;
+      const chg = Math.max(Number(formData.grossWeightKg || 0), vol);
+      setFormData((prev) => ({
+        ...prev,
+        transportMode: 'air',
+        polCode: 'CAI',
+        polName: 'مطار القاهرة الدولي لشحن البضائع (CAI)',
+        podCode: 'DXB',
+        podName: 'مطار دبي الدولي للشحن (DXB)',
+        incoterm: 'FCA',
+        volumetricWeightKg: vol,
+        chargeableWeightKg: chg,
+      }));
+    } else if (mode === 'road') {
+      setFormData((prev) => ({
+        ...prev,
+        transportMode: 'road',
+        polCode: 'EGALY',
+        polName: 'ميناء الإسكندرية الجاف',
+        podCode: 'CAI',
+        podName: 'المنطقة اللوجستية بالعاشر من رمضان',
+        incoterm: 'CPT',
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        transportMode: 'sea',
+        polCode: 'CNSHA',
+        polName: 'ميناء شنغهاي - الصين',
+        podCode: 'EGALY',
+        podName: 'ميناء الإسكندرية - مصر',
+        incoterm: 'FOB',
+      }));
+    }
+  };
+
+  const handleCbmChange = (cbmVal: number) => {
+    const vol = Math.round(cbmVal * 166.667 * 10) / 10;
+    const chg = Math.max(Number(formData.grossWeightKg || 0), vol);
+    setFormData((prev) => ({
+      ...prev,
+      cbm: cbmVal,
+      volumetricWeightKg: vol,
+      chargeableWeightKg: chg,
+    }));
+  };
+
+  const handleGrossWeightChange = (grossVal: number) => {
+    const vol = Number(formData.volumetricWeightKg || 0);
+    const chg = Math.max(grossVal, vol);
+    setFormData((prev) => ({
+      ...prev,
+      grossWeightKg: grossVal,
+      chargeableWeightKg: chg,
+    }));
+  };
+
+  const handleCustomerChange = (customerId: string) => {
+    setSelectedCustomerId(customerId);
+    const selected = customers.find((c) => String(c.id) === customerId) as any;
+    if (selected) {
+      setFormData((prev) => ({
+        ...prev,
+        customerName: selected.company_name || selected.name || prev.customerName,
+        customerPhone: selected.phone || prev.customerPhone,
+        customerEmail: selected.email || prev.customerEmail,
+      }));
+    }
+  };
+
+  const handlePolChange = (code: string) => {
+    const p = ports.find((item) => item.code === code);
+    setFormData({
+      ...formData,
+      polCode: code,
+      polName: p ? `${p.name_ar} (${p.country_name})` : code,
+    });
+  };
+
+  const handlePodChange = (code: string) => {
+    const p = ports.find((item) => item.code === code);
+    setFormData({
+      ...formData,
+      podCode: code,
+      podName: p ? `${p.name_ar} (${p.country_name})` : code,
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!formData.customerName.trim()) {
+      setErrorMsg('يرجى إدخال اسم العميل أو الشركة');
+      return;
+    }
+    if (!formData.polCode || !formData.podCode) {
+      setErrorMsg(formData.transportMode === 'air' ? 'يرجى تحديد مطار الإقلاع ومطار المقصد' : 'يرجى تحديد ميناء الشحن وميناء المقصد');
+      return;
+    }
+    if (!formData.commodityDescription.trim()) {
+      setErrorMsg('يرجى إدخال توصيف البضاعة');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setErrorMsg(null);
+      const payload: any = {
+        ...formData,
+        grossWeightKg: Number(formData.grossWeightKg || 0),
+        cbm: Number(formData.cbm || 0),
+        volumetricWeightKg: Number(formData.volumetricWeightKg || 0),
+        chargeableWeightKg: Number(formData.chargeableWeightKg || 0),
+        packageCount: Number(formData.packageCount || 1),
+      };
+      const res = await maritimeApi.createInquiry(payload);
+      onCreated(res);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'فشل تسجيل طلب الشحن');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <StandardDialog
+      open={open}
+      onClose={onClose}
+      title={(
+        <span>
+          {t('maritime_freight.create_inquiry_modal.s0', "طلب شحن واستفسار عميل جديد")}
+          <span className="desktop-only-inline"> (New Freight Inquiry)</span>
+        </span>
+      )}
+      subtitle={(
+        <span>
+          {t('maritime_freight.create_inquiry_modal.s1', "نقطة الانطلاق لتسجيل طلب العميل وتمريره لاحقاً")}
+          <span className="desktop-only-inline"> {t('maritime_freight.create_inquiry_modal.s2', "لطلب عروض تسعير الخطوط بنقرة واحدة")}</span>
+        </span>
+      )}
+      width="min(980px, 96vw)"
+      minHeight="min(560px, 85vh)"
+      footerActions={(
+        <StandardDialogFooter
+          onCancel={onClose}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+          submitText={t('maritime_freight.create_inquiry_modal.s3', "حفظ طلب الشحن")}
+          cancelText={t('maritime_freight.create_inquiry_modal.s4', "إلغاء")}
+        />
+      )}
+    >
+      <style>{`
+        .inquiry-compact-modal .field {
+          margin-bottom: 0 !important;
+          gap: 3px !important;
+        }
+        .inquiry-compact-modal .field span {
+          font-size: 0.74rem !important;
+          font-weight: 600 !important;
+          color: #334155 !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+        .inquiry-compact-modal input {
+          height: 33px !important;
+          font-size: 0.8125rem !important;
+          border-radius: 6px !important;
+          padding: 0 10px !important;
+        }
+        .inquiry-compact-modal .custom-combobox,
+        .inquiry-compact-modal .custom-select-trigger {
+          min-height: 33px !important;
+          height: 33px !important;
+          font-size: 0.8125rem !important;
+          border-radius: 6px !important;
+        }
+
+        /* Desktop Grids (Default) */
+        .inquiry-grid-customer {
+          display: grid;
+          grid-template-columns: 1.4fr 1fr 1.2fr;
+          gap: 10px;
+        }
+        .inquiry-grid-route {
+          display: grid;
+          grid-template-columns: 1.1fr 1.1fr 1.6fr 1.6fr;
+          gap: 10px;
+        }
+        .inquiry-grid-air-specs {
+          display: grid;
+          grid-template-columns: 1.2fr 0.8fr 1fr 1fr 1.1fr 1.1fr;
+          gap: 10px;
+          margin-bottom: 8px;
+        }
+        .inquiry-grid-sea-cargo {
+          display: grid;
+          grid-template-columns: 1fr 1.3fr 0.8fr 0.9fr 1fr 0.9fr;
+          gap: 10px;
+          margin-bottom: 8px;
+        }
+
+        /* Mobile Grids (<= 768px): Balanced 2-Column Standard */
+        @media (max-width: 768px) {
+          .inquiry-compact-modal .field span {
+            font-size: 0.72rem !important;
+          }
+          .inquiry-grid-customer {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+          }
+          .inquiry-grid-route {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+          }
+          .inquiry-grid-air-specs {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+            margin-bottom: 8px !important;
+          }
+          .inquiry-grid-sea-cargo {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+            margin-bottom: 8px !important;
+          }
+          .inquiry-col-full-mobile {
+            grid-column: span 2 !important;
+          }
+        }
+      `}</style>
+      <div className="inquiry-compact-modal" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {errorMsg && (
+          <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', fontSize: '0.8rem' }}>
+            {errorMsg}
+          </div>
+        )}
+
+        {/* نمط وسيلة النقل: بحري / جوي / بري */}
+        {activeModesCount > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f1f5f9', padding: '6px', borderRadius: '8px' }}>
+            {enableSeaFreight && (
+              <button
+                type="button"
+                onClick={() => handleModeChange('sea')}
+                style={{
+                  flex: 1,
+                  padding: '7px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: formData.transportMode === 'sea' ? '#170e5e' : 'transparent',
+                  color: formData.transportMode === 'sea' ? '#ffffff' : '#475569',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                <AppIcons.Ship size={15} />
+                <span>{t('maritime_freight.create_inquiry_modal.s5', "شحن بحري")}<span className="desktop-only-inline"> (Ocean Freight)</span></span>
+              </button>
+            )}
+            {enableAirFreight && (
+              <button
+                type="button"
+                onClick={() => handleModeChange('air')}
+                style={{
+                  flex: 1,
+                  padding: '7px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: formData.transportMode === 'air' ? '#170e5e' : 'transparent',
+                  color: formData.transportMode === 'air' ? '#ffffff' : '#475569',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <AppIcons.Plane size={15} />
+                <span>{t('maritime_freight.create_inquiry_modal.s6', "شحن جوي")}<span className="desktop-only-inline"> (Air Freight / AWB)</span></span>
+              </button>
+            )}
+            {enableRoadFreight && (
+              <button
+                type="button"
+                onClick={() => handleModeChange('road')}
+                style={{
+                  flex: 1,
+                  padding: '7px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: formData.transportMode === 'road' ? '#170e5e' : 'transparent',
+                  color: formData.transportMode === 'road' ? '#ffffff' : '#475569',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <AppIcons.Truck size={15} />
+                <span>{t('maritime_freight.create_inquiry_modal.s7', "شحن بري")}<span className="desktop-only-inline"> (Road Freight)</span></span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 1. بيانات العميل */}
+        <div style={{ background: '#f8fafc', padding: '9px 13px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', color: '#170e5e', fontWeight: 700, fontSize: '0.84rem' }}>
+            <AppIcons.Users size={15} />
+            <span>
+              {t('maritime_freight.create_inquiry_modal.s8', "1. بيانات العميل أو المستورد")}
+              <span className="desktop-only-inline"> (Customer Profile)</span>
+            </span>
+          </div>
+
+          <div style={{ marginBottom: '8px' }}>
+            <Field label={t('maritime_freight.create_inquiry_modal.s9', "اختيار عميل مسجل من الدليل (Customer Lookup) - اختياري")}>
+              <CustomSelect
+                value={selectedCustomerId}
+                onChange={handleCustomerChange}
+                placeholder={t('maritime_freight.create_inquiry_modal.s10', "اختر عميلاً مسجلاً لجلب بياناته تلقائياً أو أدخل البيانات يدوياً أدناه...")}
+                options={[
+                  { value: '', label: t('maritime_freight.create_inquiry_modal.s11', "— إدخال يدوي / عميل جديد —") },
+                  ...customers.map((c: any) => ({
+                    value: String(c.id),
+                    label: `${c.company_name ? `${c.company_name} - ` : ''}${c.name || t('maritime_freight.create_inquiry_modal.s12', "عميل")}${c.phone ? ` (${c.phone})` : ''}`,
+                  })),
+                ]}
+              />
+            </Field>
+          </div>
+
+          <div className="inquiry-grid-customer">
+            <div className="inquiry-col-full-mobile">
+              <Field label={t('maritime_freight.create_inquiry_modal.s13', "اسم العميل أو الشركة *")}>
+                <input
+                  type="text"
+                  value={formData.customerName}
+                  onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                  placeholder={t('maritime_freight.create_inquiry_modal.s14', "مثال: شركة الأفق للاستيراد والتصدير")}
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+            </div>
+
+            <div>
+              <Field label={t('maritime_freight.create_inquiry_modal.s15', "رقم الهاتف أو الواتساب")}>
+                <input
+                  type="tel"
+                  value={formData.customerPhone}
+                  onChange={(e) => setFormData({ ...formData, customerPhone: e.target.value })}
+                  placeholder="01012345678"
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+            </div>
+
+            <div>
+              <Field label={t('maritime_freight.create_inquiry_modal.s16', "البريد الإلكتروني للعميل")}>
+                <input
+                  type="email"
+                  value={formData.customerEmail}
+                  onChange={(e) => setFormData({ ...formData, customerEmail: e.target.value })}
+                  placeholder="client@alofok.com"
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. مسار الشحن والموانئ / المطارات */}
+        <div style={{ background: '#f8fafc', padding: '9px 13px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', color: '#170e5e', fontWeight: 700, fontSize: '0.84rem' }}>
+            {formData.transportMode === 'air' ? <AppIcons.Plane size={15} /> : formData.transportMode === 'road' ? <AppIcons.Truck size={15} /> : <AppIcons.Ship size={15} />}
+            <span>
+              2.{' '}
+              {formData.transportMode === 'air' ? (
+                <>
+                  {t('maritime_freight.create_inquiry_modal.s17', "مسار الشحن الجوي والمطارات")}
+                  <span className="desktop-only-inline"> (Route & Airports)</span>
+                </>
+              ) : formData.transportMode === 'road' ? (
+                <>
+                  {t('maritime_freight.create_inquiry_modal.s18', "مسار النقل البري والمحطات")}
+                  <span className="desktop-only-inline"> (Route & Terminals)</span>
+                </>
+              ) : (
+                <>
+                  {t('maritime_freight.create_inquiry_modal.s19', "مسار الشحن والموانئ المستهدفة")}
+                  <span className="desktop-only-inline"> (Route & Ports)</span>
+                </>
+              )}
+            </span>
+          </div>
+
+          <div className="inquiry-grid-route">
+            <Field label={t('maritime_freight.create_inquiry_modal.s20', "اتجاه الشحنة *")}>
+              <CustomSelect
+                value={formData.direction}
+                onChange={(val) => setFormData({ ...formData, direction: val as any })}
+                options={[
+                  { value: 'import', label: t('maritime_freight.create_inquiry_modal.s21', "شحن وارد (Import)") },
+                  { value: 'export', label: t('maritime_freight.create_inquiry_modal.s22', "شحن صادر (Export)") },
+                  { value: 'cross_trade', label: t('maritime_freight.create_inquiry_modal.s23', "شحن وسيط (Cross-Trade)") },
+                ]}
+              />
+            </Field>
+
+            <Field label={t('maritime_freight.create_inquiry_modal.s24', "شرط التسليم (Incoterm) *")}>
+              <CustomSelect
+                value={formData.incoterm}
+                onChange={(val) => setFormData({ ...formData, incoterm: val })}
+                options={
+                  formData.transportMode === 'air'
+                    ? [
+                        { value: 'FCA', label: t('maritime_freight.create_inquiry_modal.s25', "FCA - تسليم للناقل الجوي") },
+                        { value: 'CPT', label: t('maritime_freight.create_inquiry_modal.s26', "CPT - النولون مدفوع حتى") },
+                        { value: 'CIP', label: t('maritime_freight.create_inquiry_modal.s27', "CIP - النولون والتأمين مدفوعان") },
+                        { value: 'DAP', label: t('maritime_freight.create_inquiry_modal.s28', "DAP - محل الوصول") },
+                        { value: 'DDP', label: t('maritime_freight.create_inquiry_modal.s29', "DDP - خالص الجمارك") },
+                        { value: 'EXW', label: t('maritime_freight.create_inquiry_modal.s30', "EXW - أرض المصنع") },
+                      ]
+                    : formData.transportMode === 'road'
+                    ? [
+                        { value: 'CPT', label: t('maritime_freight.create_inquiry_modal.s31', "CPT - النولون مدفوع حتى") },
+                        { value: 'CIP', label: t('maritime_freight.create_inquiry_modal.s32', "CIP - النولون والتأمين") },
+                        { value: 'FCA', label: t('maritime_freight.create_inquiry_modal.s33', "FCA - تسليم للناقل") },
+                        { value: 'DAP', label: t('maritime_freight.create_inquiry_modal.s34', "DAP - محل الوصول") },
+                        { value: 'DDP', label: t('maritime_freight.create_inquiry_modal.s35', "DDP - خالص الجمارك") },
+                        { value: 'EXW', label: t('maritime_freight.create_inquiry_modal.s36', "EXW - أرض المصنع") },
+                      ]
+                    : [
+                        { value: 'FOB', label: t('maritime_freight.create_inquiry_modal.s37', "FOB - على ظهر السفينة") },
+                        { value: 'EXW', label: t('maritime_freight.create_inquiry_modal.s38', "EXW - أرض المصنع") },
+                        { value: 'CFR', label: t('maritime_freight.create_inquiry_modal.s39', "CFR - التكلفة والنولون") },
+                        { value: 'CIF', label: t('maritime_freight.create_inquiry_modal.s40', "CIF - شامل التأمين والنولون") },
+                        { value: 'DDP', label: t('maritime_freight.create_inquiry_modal.s41', "DDP - خالص الجمارك") },
+                        { value: 'DAP', label: t('maritime_freight.create_inquiry_modal.s42', "DAP - محل الوصول") },
+                      ]
+                }
+              />
+            </Field>
+
+            <Field label={formData.transportMode === 'air' ? t('maritime_freight.create_inquiry_modal.s43', "مطار الإقلاع والشحن *") : formData.transportMode === 'road' ? t('maritime_freight.create_inquiry_modal.s44', "نقطة الانطلاق والتحميل *") : t('maritime_freight.create_inquiry_modal.s45', "ميناء الشحن والتحميل (POL) *")}>
+              <ComboboxSelect
+                value={formData.polCode}
+                onChange={handlePolChange}
+                options={ports
+                  .filter((p) => {
+                    if (formData.transportMode === 'air') return p.port_type === 'air' || p.iata_code;
+                    if (formData.transportMode === 'road') return p.port_type === 'road' || true;
+                    return !p.port_type || p.port_type === 'sea';
+                  })
+                  .map((p) => ({
+                    id: p.code,
+                    label: `${p.name_ar} (${p.code})`,
+                  }))}
+                placeholder={formData.transportMode === 'air' ? t('maritime_freight.create_inquiry_modal.s46', "ابحث عن مطار الإقلاع أو الكود...") : t('maritime_freight.create_inquiry_modal.s47', "ابحث عن ميناء الشحن أو الكود...")}
+              />
+            </Field>
+
+            <Field label={formData.transportMode === 'air' ? t('maritime_freight.create_inquiry_modal.s48', "مطار الوصول والمقصد *") : formData.transportMode === 'road' ? t('maritime_freight.create_inquiry_modal.s49', "نقطة الوصول والتسليم *") : t('maritime_freight.create_inquiry_modal.s50', "ميناء التفريغ والمقصد (POD) *")}>
+              <ComboboxSelect
+                value={formData.podCode}
+                onChange={handlePodChange}
+                options={ports
+                  .filter((p) => {
+                    if (formData.transportMode === 'air') return p.port_type === 'air' || p.iata_code;
+                    if (formData.transportMode === 'road') return p.port_type === 'road' || true;
+                    return !p.port_type || p.port_type === 'sea';
+                  })
+                  .map((p) => ({
+                    id: p.code,
+                    label: `${p.name_ar} (${p.code})`,
+                  }))}
+                placeholder={formData.transportMode === 'air' ? t('maritime_freight.create_inquiry_modal.s51', "ابحث عن مطار الوصول أو الكود...") : t('maritime_freight.create_inquiry_modal.s52', "ابحث عن ميناء التفريغ أو الكود...")}
+              />
+            </Field>
+          </div>
+        </div>
+
+        {/* 3. مواصفات البضاعة والحاويات / الشحن الجوي */}
+        <div style={{ background: '#f8fafc', padding: '9px 13px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', color: '#170e5e', fontWeight: 700, fontSize: '0.84rem' }}>
+            {formData.transportMode === 'air' ? <AppIcons.Plane size={15} /> : <AppIcons.Container size={15} />}
+            <span>
+              3.{' '}
+              {formData.transportMode === 'air' ? (
+                <>
+                  {t('maritime_freight.create_inquiry_modal.s53', "مواصفات البضاعة والشحن الجوي")}
+                  <span className="desktop-only-inline"> IATA (Air Cargo Specs)</span>
+                </>
+              ) : formData.transportMode === 'road' ? (
+                <>
+                  {t('maritime_freight.create_inquiry_modal.s54', "مواصفات البضاعة وتجهيز الشاحنات")}
+                  <span className="desktop-only-inline"> (Road Specs)</span>
+                </>
+              ) : (
+                <>
+                  {t('maritime_freight.create_inquiry_modal.s55', "مواصفات البضاعة وتجهيز الحاويات")}
+                  <span className="desktop-only-inline"> (Cargo & Equipment)</span>
+                </>
+              )}
+            </span>
+          </div>
+
+          {formData.transportMode === 'air' ? (
+            <div className="inquiry-grid-air-specs">
+              <Field label={t('maritime_freight.create_inquiry_modal.s56', "نوع البضاعة الجوية *")}>
+                <CustomSelect
+                  value={formData.airCargoType}
+                  onChange={(val) => setFormData({ ...formData, airCargoType: val })}
+                  options={[
+                    { value: 'general', label: t('maritime_freight.create_inquiry_modal.s57', "بضائع عامة (General Cargo)") },
+                    { value: 'perishable', label: t('maritime_freight.create_inquiry_modal.s58', "سريعة التلف (Perishable)") },
+                    { value: 'dangerous_goods', label: t('maritime_freight.create_inquiry_modal.s59', "بضائع خطرة (DG Cargo)") },
+                    { value: 'pharma', label: t('maritime_freight.create_inquiry_modal.s60', "أدوية ومستحضرات طبية (Pharma)") },
+                    { value: 'valuable', label: t('maritime_freight.create_inquiry_modal.s61', "بضائع ثمينة (Valuable)") },
+                  ]}
+                />
+              </Field>
+
+              <Field label={t('maritime_freight.create_inquiry_modal.s62', "عدد الطرود *")}>
+                <input
+                  type="number"
+                  min={1}
+                  value={formData.packageCount}
+                  onChange={(e) => setFormData({ ...formData, packageCount: parseInt(e.target.value, 10) || 1 })}
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+
+              <Field label={t('maritime_freight.create_inquiry_modal.s63', "الوزن القائم (كجم) *")}>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={formData.grossWeightKg || ''}
+                  onChange={(e) => handleGrossWeightChange(parseFloat(e.target.value) || 0)}
+                  placeholder={t('maritime_freight.create_inquiry_modal.s64', "مثال: 450")}
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+
+              <Field label={t('maritime_freight.create_inquiry_modal.s65', "الحجم (CBM) *")}>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={formData.cbm || ''}
+                  onChange={(e) => handleCbmChange(parseFloat(e.target.value) || 0)}
+                  placeholder={t('maritime_freight.create_inquiry_modal.s66', "مثال: 3.2")}
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+
+              <Field label={t('maritime_freight.create_inquiry_modal.s67', "الوزن الحجمي (IATA)")}>
+                <input
+                  type="text"
+                  readOnly
+                  value={`${formData.volumetricWeightKg || 0} كجم`}
+                  title={t('maritime_freight.create_inquiry_modal.s68', "محسوب تلقائياً: 1 CBM = 166.67 كجم")}
+                  style={{ width: '100%', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#475569', fontWeight: 600 }}
+                />
+              </Field>
+
+              <Field label={t('maritime_freight.create_inquiry_modal.s69', "الوزن المحاسبي (Chargeable)")}>
+                <input
+                  type="text"
+                  readOnly
+                  value={`${formData.chargeableWeightKg || 0} كجم`}
+                  title={t('maritime_freight.create_inquiry_modal.s70', "الوزن الخاضع للتحصيل: الأكبر بين الوزن القائم والوزن الحجمي")}
+                  style={{ width: '100%', border: '1px solid #86efac', background: '#f0fdf4', color: '#15803d', fontWeight: 800 }}
+                />
+              </Field>
+            </div>
+          ) : (
+            <div className="inquiry-grid-sea-cargo">
+              <Field label={formData.transportMode === 'road' ? t('maritime_freight.create_inquiry_modal.s71', "نوع النقل *") : t('maritime_freight.create_inquiry_modal.s72', "نمط الشحن *")}>
+                <CustomSelect
+                  value={formData.cargoMode}
+                  onChange={(val) => setFormData({ ...formData, cargoMode: val })}
+                  options={
+                    formData.transportMode === 'road'
+                      ? [
+                          { value: 'FTL', label: t('maritime_freight.create_inquiry_modal.s73', "FTL - شاحنة كاملة") },
+                          { value: 'LTL', label: t('maritime_freight.create_inquiry_modal.s74', "LTL - حمولة جزئية") },
+                        ]
+                      : [
+                          { value: 'FCL', label: t('maritime_freight.create_inquiry_modal.s75', "FCL - حاوية كاملة") },
+                          { value: 'LCL', label: t('maritime_freight.create_inquiry_modal.s76', "LCL - شحن مجزأ") },
+                        ]
+                  }
+                />
+              </Field>
+
+              <Field label={formData.transportMode === 'road' ? t('maritime_freight.create_inquiry_modal.s77', "نوع الشاحنة *") : t('maritime_freight.create_inquiry_modal.s78', "نوع الحاوية *")}>
+                <CustomSelect
+                  value={formData.containerType}
+                  onChange={(val) => setFormData({ ...formData, containerType: val })}
+                  options={
+                    formData.transportMode === 'road'
+                      ? [
+                          { value: 'Curtain', label: t('maritime_freight.create_inquiry_modal.s79', "تريلا ستارة (Curtain)") },
+                          { value: 'Box', label: t('maritime_freight.create_inquiry_modal.s80', "صندوق مغلق (Box)") },
+                          { value: 'Reefer', label: t('maritime_freight.create_inquiry_modal.s81', "شاحنة مبردة (Reefer)") },
+                          { value: 'Flatbed', label: t('maritime_freight.create_inquiry_modal.s82', "شاحنة مسطحة (Flatbed)") },
+                        ]
+                      : [
+                          { value: '40HC', label: "40' High Cube (40HC)" },
+                          { value: '20GP', label: "20' Dry (20GP)" },
+                          { value: '40GP', label: "40' Dry (40GP)" },
+                          { value: '40RF', label: t('maritime_freight.create_inquiry_modal.s83', "40' Reefer مبرد") },
+                          { value: '20RF', label: t('maritime_freight.create_inquiry_modal.s84', "20' Reefer مبرد") },
+                          { value: '45HC', label: "45' High Cube" },
+                          { value: 'OpenTop', label: 'Open Top' },
+                          { value: 'FlatRack', label: 'Flat Rack' },
+                        ]
+                  }
+                />
+              </Field>
+
+              <Field label={formData.transportMode === 'road' ? t('maritime_freight.create_inquiry_modal.s85', "عدد الشاحنات *") : t('maritime_freight.create_inquiry_modal.s86', "عدد الحاويات *")}>
+                <input
+                  type="number"
+                  min={1}
+                  value={formData.containerCount}
+                  onChange={(e) => setFormData({ ...formData, containerCount: parseInt(e.target.value, 10) || 1 })}
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+
+              <Field label={t('maritime_freight.create_inquiry_modal.s87', "أيام السماح (يوم)")}>
+                <input
+                  type="number"
+                  min={7}
+                  value={formData.targetFreeDays}
+                  onChange={(e) => setFormData({ ...formData, targetFreeDays: parseInt(e.target.value, 10) || 14 })}
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+
+              <Field label={t('maritime_freight.create_inquiry_modal.s88', "الوزن القائم (كجم)")}>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.grossWeightKg}
+                  onChange={(e) => setFormData({ ...formData, grossWeightKg: parseFloat(e.target.value) || 0 })}
+                  placeholder="22000"
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+
+              <Field label={t('maritime_freight.create_inquiry_modal.s89', "الحجم (CBM)")}>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={formData.cbm}
+                  onChange={(e) => setFormData({ ...formData, cbm: parseFloat(e.target.value) || 0 })}
+                  placeholder="68"
+                  style={{ width: '100%', border: '1px solid #cbd5e1' }}
+                />
+              </Field>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
+            <Field label={t('maritime_freight.create_inquiry_modal.s90', "توصيف البضاعة والصنف (Commodity) *")}>
+              <input
+                type="text"
+                value={formData.commodityDescription}
+                onChange={(e) => setFormData({ ...formData, commodityDescription: e.target.value })}
+                placeholder={t('maritime_freight.create_inquiry_modal.s91', "مثال: أدوات ومعدات كهربائية، قطع غيار، أقمشة ومنسوجات، مواد غذائية...")}
+                style={{ width: '100%', border: '1px solid #cbd5e1' }}
+              />
+            </Field>
+          </div>
+        </div>
+      </div>
+    </StandardDialog>
+  );
+}

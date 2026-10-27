@@ -1,0 +1,316 @@
+import { useTranslation } from 'react-i18next';
+import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAppToolbar } from '@/stores/toolbar-store';
+import { PageHeader } from '@/shared/components/page-header';
+import { StatsGrid } from '@/shared/components/stats-grid';
+import { Button } from '@/shared/ui/button';
+import { formatCurrency } from '@/lib/format';
+import {
+  crmApi,
+  type CrmDeal,
+  type DealStage,
+} from '../api/crm.api';
+import {
+  PlusIcon,
+  SearchIcon,
+} from '@/shared/components/icons/AppIcons';
+import { STAGES } from '../components/CrmConstants';
+import { CrmStageRow } from '../components/CrmStageRow';
+import { CrmDealCreateModal } from '../components/CrmDealCreateModal';
+import { CrmDealDetailModal } from '../components/CrmDealDetailModal';
+import { CrmDealTable } from '../components/CrmDealTable';
+import { CustomSelect } from '@/shared/ui/custom-select';
+import { toast } from '@/shared/components/system-alert';
+
+export function CrmPipelinePage() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  useAppToolbar([
+    { label: 'المبيعات', to: '/sales' },
+    { label: 'إدارة علاقات العملاء (CRM)' },
+  ]);
+
+  // State filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [stageFilter, setStageFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
+
+  // Modals state
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedDealId, setSelectedDealId] = useState<number | null>(null);
+
+  // Queries
+  const { data: deals = [] } = useQuery({
+    queryKey: ['crm-deals'],
+    queryFn: () => crmApi.list(),
+  });
+
+  const { data: summary } = useQuery({
+    queryKey: ['crm-summary'],
+    queryFn: crmApi.getSummary,
+  });
+
+  // Mutations
+  const updateDealMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => crmApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['crm-deals'] });
+      queryClient.invalidateQueries({ queryKey: ['crm-summary'] });
+    },
+    onError: (err: any) => {
+      showFeedback('error', err?.message || 'فشل تحديث الفرصة.');
+    },
+  });
+
+  function showFeedback(type: 'success' | 'error', text: string) {
+    if (type === 'success') {
+      toast.success(text);
+    } else {
+      toast.error(text);
+    }
+  }
+
+  function handleStageChange(deal: CrmDeal, nextStage: DealStage) {
+    const stageObj = STAGES.find((s) => s.key === nextStage);
+    const newProb = stageObj ? stageObj.defaultProbability : deal.probability;
+    updateDealMutation.mutate({
+      id: deal.id,
+      data: {
+        stage: nextStage,
+        probability: newProb,
+      },
+    });
+  }
+
+  // Filtered deals
+  const filteredDeals = useMemo(() => {
+    return deals.filter((d) => {
+      if (priorityFilter !== 'all' && d.priority !== priorityFilter) return false;
+      if (stageFilter !== 'all' && d.stage !== stageFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchTitle = d.title.toLowerCase().includes(q);
+        const matchContact = d.contactName?.toLowerCase().includes(q);
+        const matchCompany = d.companyName?.toLowerCase().includes(q);
+        const matchPhone = d.contactPhone?.includes(q);
+        if (!matchTitle && !matchContact && !matchCompany && !matchPhone) return false;
+      }
+      return true;
+    });
+  }, [deals, priorityFilter, stageFilter, searchQuery]);
+
+  return (
+    <div className="page-stack page-shell crm-pipeline-page">
+      <main className="document-prototype-column" style={{ paddingBottom: '100px', maxWidth: '1280px', margin: '0 auto', width: '100%' }}>
+        {/* Top Header */}
+        <PageHeader
+          title={t('crm.crm_pipeline_page.s0', "إدارة علاقات العملاء والصفقات (CRM Pipeline)")}
+          description={t('crm.crm_pipeline_page.s1', "تتبع مسار المبيعات والفرص التجارية، إدارة الأنشطة والمهام، والتحويل الفوري إلى عملاء وفواتير بيع.")}
+          badge={<span className="nav-pill">{t('crm.crm_pipeline_page.s2', "خط المبيعات")}</span>}
+          actions={
+            <div className="actions compact-actions page-header-actions">
+              <Button
+                variant="primary"
+                onClick={() => setIsCreateOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <PlusIcon size={16} />
+                <span>{t('crm.crm_pipeline_page.s3', "إضافة فرصة بيعية")}</span>
+              </Button>
+              <Link to="/customers">
+                <Button variant="secondary" style={{ fontWeight: 600 }}>
+                  <span>{t('crm.to_customers', "دليل وسجل العملاء")}</span>
+                </Button>
+              </Link>
+            </div>
+          }
+        />
+
+        {/* KPI Cards Grid */}
+        <div style={{ marginBottom: '16px' }}>
+          <StatsGrid
+            items={[
+              {
+                key: 'active-deals',
+                label: t('crm.crm_pipeline_page.s4', "إجمالي الفرص النشطة"),
+                value: `${summary?.totalActiveCount ?? 0} ${t('crm.deal_unit', 'فرصة')}`,
+              },
+              {
+                key: 'pipeline-amount',
+                label: t('crm.crm_pipeline_page.s5', "قيمة المسار النشط"),
+                value: formatCurrency(summary?.totalActiveAmount ?? 0),
+              },
+              {
+                key: 'weighted-amount',
+                label: t('crm.crm_pipeline_page.s6', "القيمة الموزونة المتوقعة"),
+                value: formatCurrency(summary?.weightedAmount ?? 0),
+              },
+              {
+                key: 'win-rate',
+                label: t('crm.crm_pipeline_page.s7', "معدل الإغلاق والنجاح"),
+                value: `${summary?.winRate ?? 0}%`,
+              },
+            ]}
+          />
+        </div>
+
+        {/* Main Workspace Panel */}
+        <section className="document-prototype-section workspace-panel">
+          <div className="section-header-compact-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h2 className="document-prototype-section-title" style={{ margin: 0 }}>{t('crm.crm_pipeline_page.s8', "مسار الصفقات والمتابعات")}</h2>
+              <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#64748b' }}>{t('crm.crm_pipeline_page.s9', "إدارة ومتابعة تحويل الفرص البيعية والأنشطة")}</p>
+            </div>
+          </div>
+
+          {/* Control Bar: Filters, Search & View Switcher */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '12px',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '16px',
+            }}
+          >
+        <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: '300px', alignItems: 'center' }}>
+          {/* Search Input */}
+          <div style={{ position: 'relative', flex: 1, maxWidth: '340px' }}>
+            <input
+              type="text"
+              placeholder={t('crm.crm_pipeline_page.s10', "بحث بالفرصة، العميل، الهاتف...")}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 36px 8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                fontSize: '13px',
+                outline: 'none',
+              }}
+            />
+            <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
+              <SearchIcon size={16} color="#94a3b8" />
+            </span>
+          </div>
+
+          {/* Priority Filter */}
+          <div style={{ width: '150px' }}>
+            <CustomSelect
+              value={priorityFilter}
+              onChange={(val) => setPriorityFilter(val)}
+              options={[
+                { value: 'all', label: t('crm.crm_pipeline_page.s11', "كافة الأولويات") },
+                { value: 'urgent', label: t('crm.crm_pipeline_page.s12', "عاجلة جداً") },
+                { value: 'high', label: t('crm.crm_pipeline_page.s13', "مرتفعة") },
+                { value: 'medium', label: t('crm.crm_pipeline_page.s14', "متوسطة") },
+                { value: 'low', label: t('crm.crm_pipeline_page.s15', "منخفضة") },
+              ]}
+              placeholder={t('crm.crm_pipeline_page.s16', "الأولوية...")}
+            />
+          </div>
+
+          {/* Stage Filter (for table view) */}
+          {viewMode === 'table' && (
+            <div style={{ width: '170px' }}>
+              <CustomSelect
+                value={stageFilter}
+                onChange={(val) => setStageFilter(val)}
+                options={[
+                  { value: 'all', label: t('crm.crm_pipeline_page.s17', "كافة المراحل") },
+                  ...STAGES.map((s) => ({ value: s.key, label: s.label })),
+                  { value: 'lost', label: t('crm.crm_pipeline_page.s18', "صفقة خاسرة") },
+                ]}
+                placeholder={t('crm.crm_pipeline_page.s19', "المرحلة...")}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* View Switcher Buttons */}
+        <div style={{ display: 'flex', gap: '4px', background: '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+          <button
+            onClick={() => setViewMode('kanban')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '6px',
+              border: 'none',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              background: viewMode === 'kanban' ? '#ffffff' : 'transparent',
+              color: viewMode === 'kanban' ? '#170e5e' : '#64748b',
+              boxShadow: viewMode === 'kanban' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            {t('crm.crm_pipeline_page.s20', "لوحة كانبان (Kanban)")}
+          </button>
+          <button
+            onClick={() => setViewMode('table')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '6px',
+              border: 'none',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              background: viewMode === 'table' ? '#ffffff' : 'transparent',
+              color: viewMode === 'table' ? '#170e5e' : '#64748b',
+              boxShadow: viewMode === 'table' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            {t('crm.crm_pipeline_page.s21', "جدول تفصيلي (Table)")}
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      {viewMode === 'kanban' ? (
+        /* Kanban Vertical Layout - كل مرحلة row كامل العرض */
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+          }}
+        >
+          {STAGES.map((stage) => (
+            <CrmStageRow
+              key={stage.key}
+              stage={stage}
+              deals={filteredDeals}
+              onSelectDeal={setSelectedDealId}
+              onStageChange={handleStageChange}
+            />
+          ))}
+        </div>
+      ) : (
+        /* Table View */
+        <CrmDealTable deals={filteredDeals} onSelectDeal={setSelectedDealId} />
+      )}
+      </section>
+    </main>
+
+      {/* Modal: Create New Deal */}
+      <CrmDealCreateModal
+        open={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSuccess={(msg) => showFeedback('success', msg)}
+      />
+
+      {/* Modal: Deal Details */}
+      <CrmDealDetailModal
+        dealId={selectedDealId}
+        onClose={() => setSelectedDealId(null)}
+        onStageChange={handleStageChange}
+        onFeedback={showFeedback}
+      />
+    </div>
+  );
+}

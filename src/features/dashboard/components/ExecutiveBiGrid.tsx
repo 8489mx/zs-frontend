@@ -1,0 +1,551 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+} from 'recharts';
+import { formatCurrency } from '@/lib/format';
+import { BarChartIcon } from '@/shared/components/icons/AppIcons';
+import type { DashboardOverviewPayload, DashboardManagerOverviewPayload } from '@/features/dashboard/api/dashboard.types';
+
+interface ExecutiveBiGridProps {
+  overviewData: DashboardOverviewPayload;
+  managerData?: DashboardManagerOverviewPayload | null;
+  isLoading?: boolean;
+}
+
+const PAYMENT_COLORS = {
+  cash: '#170e5e',      // كاش - كحلي ملكي
+  card: '#2563eb',      // بطاقات وفيزا POS - أزرق بنكي
+  online: '#059669',    // متجر إلكتروني وبوابات - أخضر زمردي
+  credit: '#d97706',    // مبيعات آجلة - عنبري
+};
+
+export function ExecutiveBiGrid({ overviewData, managerData, isLoading = false }: ExecutiveBiGridProps) {
+  const { t, i18n } = useTranslation();
+  const isEn = i18n.language !== 'ar';
+
+  // تفعيل أنيميشن الرسم الدائري الانسيابي فور فتح الصفحة
+  const [isChartMounted, setIsChartMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsChartMounted(true);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const { summary } = overviewData;
+  const profitSummary = managerData?.profitSummary;
+  const salesLast30 = managerData?.salesLast30;
+
+  // 1. حساب مؤشرات الأداء التنفيذي الفريدة (غير المكررة)
+  const averageBasket = salesLast30?.averageInvoice || 0;
+  const grossSales = Number(summary?.sales?.total || 0);
+  const netSales = Number(profitSummary?.netSales ?? summary?.sales?.netSales ?? grossSales);
+  const grossProfit = Number(profitSummary?.grossProfit ?? (netSales - Number(profitSummary?.cogs ?? 0)));
+  const grossMarginPercent = netSales > 0 ? Math.round((grossProfit / netSales) * 100) : 0;
+  const netOperatingProfit = Number(profitSummary?.netProfit ?? (grossProfit - Number(profitSummary?.expenses ?? summary?.expenses?.total ?? 0)));
+
+  const paymentBreakdown = useMemo(() => {
+    const amounts = overviewData.paymentBreakdown;
+    const values = {
+      cash: Math.max(0, Number(amounts?.cash || 0)),
+      card: Math.max(0, Number(amounts?.card || 0)),
+      online: Math.max(0, Number(amounts?.online || 0)),
+      credit: Math.max(0, Number(amounts?.credit || 0)),
+    };
+    const total = values.cash + values.card + values.online + values.credit;
+    const items = [
+      { name: t('dashboard.cash', 'نقدي (كاش)'), value: values.cash, color: PAYMENT_COLORS.cash },
+      { name: t('dashboard.pos_cards', 'بطاقات وماكينات POS'), value: values.card, color: PAYMENT_COLORS.card },
+      { name: t('dashboard.online_gateways', 'متجر وبوابات إلكترونية'), value: values.online, color: PAYMENT_COLORS.online },
+      { name: t('dashboard.credit_sales', 'مبيعات آجلة (ذمم)'), value: values.credit, color: PAYMENT_COLORS.credit },
+    ].map((entry) => ({ ...entry, percentage: total > 0 ? Math.round(entry.value / total * 100) : 0 }));
+    return { hasData: total > 0, total, items };
+  }, [overviewData.paymentBreakdown, t]);
+
+  // 4. تجهيز بيانات مساهمة أعلى الفئات / الأصناف في الربحية
+  const profitDrivers = useMemo(() => {
+    const categories = managerData?.profitSources?.topCategories || [];
+    if (categories.length > 0) {
+      return categories.slice(0, 4).map((cat) => ({
+        name: cat.categoryName || cat.name || 'فئة عامة',
+        revenue: Number(cat.revenue || 0),
+        grossProfit: Number(cat.grossProfit || 0),
+        marginPercent: Math.round(Number(cat.marginPercent || 0)),
+      }));
+    }
+
+    const topProducts = managerData?.profitSources?.topProducts || [];
+    if (topProducts.length > 0) {
+      return topProducts.slice(0, 4).map((prod) => ({
+        name: prod.name,
+        revenue: Number(prod.revenue || 0),
+        grossProfit: Number(prod.grossProfit || 0),
+        marginPercent: Math.round(Number(prod.marginPercent || 0)),
+      }));
+    }
+
+    // Sales ranking has no actual product cost; do not invent a 25% profit.
+    return [];
+  }, [managerData]);
+
+  if (isLoading) {
+    return (
+      <div style={{ background: '#ffffff', borderRadius: '16px', padding: '32px', border: '1px solid #e2e8f0', textAlign: 'center', color: '#94a3b8' }}>
+        {t('dashboard.loading_bi_analytics', 'جاري تحميل التحليلات البيانية الذكية...')}
+      </div>
+    );
+  }
+
+  return (
+    <section className="executive-bi-section" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+      
+      {/* الشريط الإحصائي العلوي (KPI Strip) - 3 في سطر واحد دائماً */}
+      <div
+        className="executive-kpi-strip keep-grid-row"
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '12px',
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'stretch',
+          width: '100%',
+          overflow: 'hidden',
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* متوسط سلة الشراء */}
+        <div
+          style={{
+            flex: '1 1 0',
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '12px 8px',
+            borderInlineEnd: '1px solid #f1f5f9',
+            textAlign: 'center',
+            gap: '3px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <strong
+            style={{
+              fontSize: 'clamp(0.84rem, 1.15vw, 0.98rem)',
+              fontWeight: 800,
+              color: '#0f172a',
+              lineHeight: 1.25,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: '100%',
+              letterSpacing: '-0.2px',
+            }}
+            title={formatCurrency(averageBasket)}
+          >
+            {formatCurrency(averageBasket)}
+          </strong>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '2px', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>{t('dashboard.avg_basket', 'متوسط السلة')}</span>
+            <span style={{ padding: '1px 6px', fontSize: '0.62rem', borderRadius: '4px', background: '#eff6ff', color: '#1d4ed8', fontWeight: 700 }}>
+              {t('dashboard.per_invoice', 'لكل فاتورة')}
+            </span>
+          </div>
+        </div>
+
+        {/* هامش مجمل الربح */}
+        <div
+          style={{
+            flex: '1 1 0',
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '12px 8px',
+            borderInlineEnd: '1px solid #f1f5f9',
+            textAlign: 'center',
+            gap: '3px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <strong
+            style={{
+              fontSize: 'clamp(0.84rem, 1.15vw, 0.98rem)',
+              fontWeight: 800,
+              color: '#059669',
+              lineHeight: 1.25,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: '100%',
+              letterSpacing: '-0.2px',
+            }}
+            title={formatCurrency(grossProfit)}
+          >
+            {formatCurrency(grossProfit)}
+          </strong>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '2px', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>{t('dashboard.gross_profit', 'مجمل الربح')}</span>
+            <span style={{ padding: '1px 6px', fontSize: '0.62rem', borderRadius: '4px', background: '#ecfdf5', color: '#047857', fontWeight: 700 }}>
+              {grossMarginPercent}%
+            </span>
+          </div>
+        </div>
+
+        {/* صافي الربح التشغيلي */}
+        <div
+          style={{
+            flex: '1 1 0',
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '12px 8px',
+            textAlign: 'center',
+            gap: '3px',
+            boxSizing: 'border-box',
+          }}
+        >
+          <strong
+            style={{
+              fontSize: 'clamp(0.84rem, 1.15vw, 0.98rem)',
+              fontWeight: 800,
+              color: '#170e5e',
+              lineHeight: 1.25,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              maxWidth: '100%',
+              letterSpacing: '-0.2px',
+            }}
+            title={formatCurrency(netOperatingProfit)}
+          >
+            {formatCurrency(netOperatingProfit)}
+          </strong>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginTop: '2px', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>{t('dashboard.net_profit', 'صافي الربح')}</span>
+            <span style={{ padding: '1px 6px', fontSize: '0.62rem', borderRadius: '4px', background: '#f8fafc', color: '#475569', fontWeight: 700 }}>
+              {t('dashboard.operating', 'تشغيلي')}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* الهيكل الثنائي المتوازن: طرق التحصيل + مساهمة القطاعات (Balanced 2-Column Grid) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+          gap: '12px',
+        }}
+      >
+
+        {/* المخطط 2: توزيع قنوات وطرق السداد (Payment Channel Distribution) */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '14px',
+            padding: '16px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
+          <div>
+            <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>
+              {t('dashboard.payment_distribution', 'توزيع قنوات وطرق التحصيل')}
+            </h3>
+            <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+              {t('dashboard.payment_distribution_desc', 'نسب مساهمة الكاش، الفيزا وماكينات الـ POS، المتجر، والآجل')}
+            </p>
+          </div>
+
+          {!paymentBreakdown.hasData ? (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '28px 16px',
+                textAlign: 'center',
+                gap: '8px',
+                background: '#f8fafc',
+                borderRadius: '10px',
+                border: '1px dashed #cbd5e1',
+                margin: 'auto 0',
+              }}
+            >
+              <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#475569' }}>
+                {t('dashboard.no_sales_recorded_yet', 'لا توجد عمليات بيع أو تحصيل مسجلة بعد')}
+              </span>
+              <span style={{ fontSize: '0.74rem', color: '#94a3b8', maxWidth: '300px', lineHeight: 1.5 }}>
+                {t('dashboard.no_sales_recorded_hint', 'ستظهر نسب مساهمة طرق الدفع والتحصيل (نقدي، بطاقات، متجر، آجل) هنا فور إتمام المبيعات.')}
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+              <div
+                style={{
+                  width: '140px',
+                  height: '140px',
+                  margin: '0 auto',
+                  direction: 'ltr',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                }}
+              >
+                <PieChart width={140} height={140}>
+                  <Pie
+                    key={isChartMounted ? 'donut-anim-ready' : 'donut-anim-init'}
+                    data={isChartMounted ? paymentBreakdown.items : []}
+                    dataKey="value"
+                    nameKey="name"
+                    cx={70}
+                    cy={70}
+                    innerRadius={40}
+                    outerRadius={65}
+                    paddingAngle={3}
+                    startAngle={90}
+                    endAngle={-270}
+                    isAnimationActive={true}
+                    animationBegin={100}
+                    animationDuration={900}
+                    animationEasing="ease-out"
+                  >
+                    {paymentBreakdown.items.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const item = payload[0].payload;
+                      return (
+                        <div
+                          dir={isEn ? 'ltr' : 'rtl'}
+                          style={{
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            padding: '6px 10px',
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.08)',
+                            fontSize: '0.76rem',
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, color: item.color }}>{item.name}</div>
+                          <div style={{ color: '#0f172a', marginTop: '2px' }}>
+                            {formatCurrency(item.value)} ({item.percentage}%)
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </div>
+
+              {/* دليل الألوان والأرقام (Legend List) */}
+              <div style={{ flex: '1 1 180px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {paymentBreakdown.items.map((item) => (
+                  <div
+                    key={item.name}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      background: '#f8fafc',
+                      border: '1px solid #f1f5f9',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: item.color }} />
+                      <span style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 600 }}>{item.name}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>{formatCurrency(item.value)}</strong>
+                      <span style={{ fontSize: '0.68rem', color: '#64748b', background: '#e2e8f0', padding: '1px 5px', borderRadius: '8px' }}>
+                        {item.percentage}%
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* الكارت 2: مؤشرات مساهمة الأصناف والقطاعات الأكثر ربحية (مع الحفاظ الدائم على توازن العمودين) */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '14px',
+            padding: '16px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            minHeight: '220px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>
+                {t('dashboard.top_sectors', 'أعلى القطاعات مساهمة في الإيرادات والربحية')}
+              </h3>
+              <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                {t('dashboard.top_sectors_desc', 'حجم العائد ومجمل الربح التقديري لكل قطاع تجاري')}
+              </p>
+            </div>
+            <span style={{ fontSize: '0.72rem', color: '#170e5e', background: '#e0e7ff', padding: '2px 8px', borderRadius: '10px', fontWeight: 700 }}>
+              {t('dashboard.activity_analytics', 'تحليلات النشاط')}
+            </span>
+          </div>
+
+          {profitDrivers.length > 0 ? (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: '8px',
+                marginTop: '2px',
+              }}
+            >
+              {profitDrivers.map((driver, index) => (
+                <div
+                  key={driver.name}
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px solid #f1f5f9',
+                    borderRadius: '8px',
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: '6px',
+                    minWidth: 0,
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  {/* السطر الأول: الترتيب + اسم القطاع + نسبة الهامش */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, flex: '1 1 auto' }}>
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          color: '#64748b',
+                          background: '#f1f5f9',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '4px',
+                          padding: '1px 5px',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                          flexShrink: 0,
+                        }}
+                      >
+                        #{index + 1}
+                      </span>
+                      <strong
+                        style={{
+                          fontSize: '0.82rem',
+                          color: '#0f172a',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                        title={driver.name}
+                      >
+                        {driver.name}
+                      </strong>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '0.68rem',
+                        color: '#047857',
+                        background: '#ecfdf5',
+                        border: '1px solid #d1fae5',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {driver.marginPercent}%
+                    </span>
+                  </div>
+
+                  {/* السطر الثاني: إجمالي العائد ومجمل الربح بوضوح تام */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                      <span style={{ fontSize: '0.62rem', color: '#64748b', fontWeight: 600 }}>{t('dashboard.total_revenue', 'إجمالي العائد')}</span>
+                      <span style={{ fontSize: '0.78rem', color: '#334155', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        {formatCurrency(driver.revenue)}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                      <span style={{ fontSize: '0.62rem', color: '#047857', fontWeight: 600 }}>{t('dashboard.gross_profit', 'مجمل الربح')}</span>
+                      <strong style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                        {formatCurrency(driver.grossProfit)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* شريط تقدم الربحية */}
+                  <div style={{ width: '100%', height: '3.5px', background: '#e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${Math.min(100, Math.max(6, driver.marginPercent))}%`,
+                        height: '100%',
+                        background: '#10b981',
+                        borderRadius: '2px',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '24px 16px',
+                background: '#f8fafc',
+                borderRadius: '10px',
+                border: '1px dashed #cbd5e1',
+                textAlign: 'center',
+                gap: '8px',
+              }}
+            >
+              <BarChartIcon size={24} color="#94a3b8" />
+              <p style={{ margin: 0, fontSize: '0.84rem', fontWeight: 700, color: '#334155' }}>
+                {t('dashboard.no_sector_sales', 'لا توجد مبيعات مسجلة للقطاعات بعد')}
+              </p>
+              <span style={{ fontSize: '0.74rem', color: '#64748b', maxWidth: '340px', lineHeight: 1.4 }}>
+                {t('dashboard.no_sector_sales_hint', 'ستظهر القطاعات والمنتجات الأكثر ربحية هنا تلقائياً بمجرد تسجيل فواتير بيع أو تجربة باقة النشاط.')}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}

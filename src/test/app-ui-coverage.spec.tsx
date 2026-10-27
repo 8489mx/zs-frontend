@@ -1,0 +1,365 @@
+import React, { useState } from 'react';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installGlobalAppFetchMock, renderAppAt } from '@/test/helpers/mock-app-api';
+import { AppProviders } from '@/app/providers';
+import type { AppSettings, Branch, Location, Product, Purchase } from '@/types/domain';
+import { SettingsPageShell } from '@/features/settings/components/SettingsPageShell';
+import { SettingsCoreSection } from '@/features/settings/components/workspace-sections/SettingsCoreSection';
+import { SettingsReferenceSection } from '@/features/settings/components/workspace-sections/SettingsReferenceSection';
+import { SettingsBackupImportSection } from '@/features/settings/components/workspace-sections/SettingsBackupImportSection';
+import { ProductsTableCard } from '@/features/products/components/ProductsTableCard';
+import { PurchasesTable } from '@/features/purchases/components/PurchasesTable';
+import { PurchaseDetailCard } from '@/features/purchases/components/PurchaseDetailCard';
+import { Card } from '@/shared/ui/card';
+import { useAuthStore } from '@/stores/auth-store';
+import '@/features/dashboard/pages/DashboardPage';
+
+beforeEach(() => {
+  installGlobalAppFetchMock();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+const settingsFixture: AppSettings = {
+  storeName: 'متجر تجريبي',
+  brandName: 'متجر تجريبي',
+  phone: '01000000000',
+  address: 'القاهرة',
+  lowStockThreshold: 5,
+  currentBranchId: 'branch-1',
+  currentLocationId: 'loc-1',
+};
+
+const branchesFixture: Branch[] = [{ id: 'branch-1', name: 'الفرع الرئيسي', code: 'MAIN' }];
+const locationsFixture: Location[] = [{ id: 'loc-1', name: 'المخزن الرئيسي', code: 'WH', branchId: 'branch-1', branchName: 'الفرع الرئيسي' }];
+
+const productFixture: Product = {
+  id: 'prod-1',
+  name: 'مياه معدنية',
+  barcode: '111',
+  categoryId: 'cat-1',
+  supplierId: 'sup-1',
+  costPrice: 5,
+  retailPrice: 10,
+  wholesalePrice: 8,
+  stock: 20,
+  minStock: 5,
+  notes: '',
+  units: [{ id: 'unit-1', name: 'قطعة', multiplier: 1, barcode: '111', isBaseUnit: true, isSaleUnit: true, isPurchaseUnit: true }],
+  offers: [],
+  customerPrices: [],
+  status: 'available',
+  statusLabel: 'متاح',
+};
+
+const purchaseFixture: Purchase = {
+  id: 'purchase-1',
+  docNo: 'PO-1001',
+  supplierId: 'sup-1',
+  supplierName: 'مورد رئيسي',
+  paymentType: 'cash',
+  subTotal: 50,
+  discount: 0,
+  taxRate: 0,
+  taxAmount: 0,
+  pricesIncludeTax: false,
+  total: 50,
+  note: '',
+  status: 'posted',
+  createdBy: 'tester',
+  branchId: 'branch-1',
+  branchName: 'الفرع الرئيسي',
+  locationId: 'loc-1',
+  locationName: 'المخزن الرئيسي',
+  date: '2026-04-15T00:00:00.000Z',
+  items: [
+    { id: 'pi-1', productId: 'prod-1', name: 'مياه معدنية', qty: 5, cost: 10, total: 50, unitName: 'قطعة', unitMultiplier: 1 },
+  ],
+};
+
+function seedPlatformUser() {
+  // SettingsSectionTabs filters every tab through canAccessPath(user, ...), so without a
+  // signed-in user in the store the shell renders zero navigation links.
+  useAuthStore.setState({
+    user: {
+      id: 'u-root',
+      username: 'root',
+      role: 'super_admin',
+      permissions: [],
+      displayName: 'Root',
+      branchIds: ['branch-1'],
+      defaultBranchId: 'branch-1',
+      tenantId: 'default',
+      accountId: 'default',
+    },
+    storeName: 'متجر تجريبي',
+    theme: 'light',
+    initialized: true,
+  });
+}
+
+function renderSettingsShell(currentSection: 'core' | 'reference' | 'users' | 'backup', children: React.ReactNode) {
+  seedPlatformUser();
+  return render(
+    <MemoryRouter initialEntries={[`/settings/${currentSection}`]}>
+      <AppProviders>
+        <SettingsPageShell
+          title="إعدادات النشاط"
+          description="اختبار واجهة الإعدادات"
+          badgeLabel="اختبار"
+          setupMode={false}
+          currentSection={currentSection}
+          currentUserRole="super_admin"
+          cards={[]}
+        >
+          {children}
+        </SettingsPageShell>
+      </AppProviders>
+    </MemoryRouter>,
+  );
+}
+
+function ProductsTableHarness() {
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  return (
+    <div>
+      <ProductsTableCard
+        search=""
+        onSearchChange={() => undefined}
+        viewFilter="all"
+        onViewFilterChange={() => undefined}
+        selectedIds={[]}
+        onSelectedIdsChange={() => undefined}
+        onClearSelection={() => undefined}
+        onBulkDelete={() => undefined}
+        visibleProducts={[productFixture]}
+        selectedProduct={selectedProduct}
+        onSelectProduct={setSelectedProduct}
+        onDeleteProduct={() => undefined}
+        onOpenOfferDialog={() => undefined}
+        onOpenBarcodeDialog={() => undefined}
+        onOpenPrintDialog={() => undefined}
+        canDelete={true}
+        canPrint={true}
+        onExportCsv={() => undefined}
+        onPrint={() => undefined}
+        categoryNames={{ 'cat-1': 'مشروبات' }}
+        supplierNames={{ 'sup-1': 'مورد رئيسي' }}
+        locationNames={{ 'loc-1': 'المخزن الرئيسي' }}
+        inventorySaleValue={200}
+        isLoading={false}
+        isError={false}
+        error={undefined}
+        page={1}
+        pageSize={20}
+        totalItems={1}
+        onPageChange={() => undefined}
+        onPageSizeChange={() => undefined}
+        clothingEnabled={false}
+      />
+      {selectedProduct ? (
+        <Card title={`تعديل: ${selectedProduct.name}`} actions={<span className="nav-pill">التعديل النشط</span>}>
+          <div>تم فتح وضع التعديل</div>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function PurchasesHarness() {
+  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
+
+  return (
+    <div>
+      <button type="button" onClick={() => setSelectedPurchase(purchaseFixture)}>
+        فتح تفاصيل اختبارية
+      </button>
+      <PurchasesTable rows={[purchaseFixture]} selectedId={selectedPurchase?.id} onSelect={setSelectedPurchase} />
+      <PurchaseDetailCard purchase={selectedPurchase ?? undefined} onPrint={() => undefined} />
+    </div>
+  );
+}
+
+describe('app ui coverage', () => {
+  vi.setConfig({ testTimeout: 20000 });
+
+  it('renders focused dashboard with daily summary cards', async () => {
+    await renderAppAt('/');
+    expect((await screen.findAllByText(/الرئيسية/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('ملخص اليوم')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('مبيعات اليوم')).toBeInTheDocument();
+    expect(await screen.findByText('صافي الخزينة')).toBeInTheDocument();
+    // Section titles after the dashboard redesign (see DashboardPage.tsx / DashboardSummaryGrid.tsx).
+    expect(await screen.findByText('تنبيهات عاجلة وموجز تنفيذي')).toBeInTheDocument();
+    expect(await screen.findByText('مركز اتخاذ القرارات')).toBeInTheDocument();
+    expect((await screen.findAllByText('أعلى أصناف اليوم مبيعاً')).length).toBeGreaterThan(0);
+    expect(await screen.findByText('الحسابات والمخزون')).toBeInTheDocument();
+    expect(screen.queryByText('المبيعات اليومية · آخر 7 أيام')).not.toBeInTheDocument();
+    expect(screen.queryByText('المشتريات اليومية · آخر 7 أيام')).not.toBeInTheDocument();
+  });
+
+  it('covers settings core, reference, users, and backup sections', async () => {
+    renderSettingsShell(
+      'core',
+      <SettingsCoreSection
+        settings={settingsFixture}
+        branches={branchesFixture}
+        locations={locationsFixture}
+        settingsQuery={{ isLoading: false, isError: false }}
+        branchesQuery={{ isLoading: false, isError: false }}
+        canManageSettings={true}
+      />,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'إعدادات النشاط' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'إعدادات النظام الأساسية' })).toBeInTheDocument();
+    // The settings form renders its section captions as plain text, not headings (a11y gap,
+    // open item O30), so the caption below is asserted by text rather than by heading role.
+    // The core settings form is tabbed now; assert the section caption, its first tab, and
+    // that the seeded store/branch fixture actually reached the form.
+    expect(await screen.findByText('تخصيص المنظومة والنشاط')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'عام' })).toBeInTheDocument();
+    expect(await screen.findByText('الفرع الرئيسي ومخازن ونمط الكاشير')).toBeInTheDocument();
+    expect((await screen.findAllByText('متجر تجريبي')).length).toBeGreaterThan(0);
+
+    cleanup();
+    installGlobalAppFetchMock();
+    renderSettingsShell(
+      'reference',
+      <SettingsReferenceSection
+        branches={branchesFixture}
+        locations={locationsFixture}
+        filteredBranches={branchesFixture}
+        filteredLocations={locationsFixture}
+        branchSearch=""
+        locationSearch=""
+        branchFilter="all"
+        locationFilter="all"
+        setBranchSearch={() => undefined}
+        setLocationSearch={() => undefined}
+        setBranchFilter={() => undefined}
+        setLocationFilter={() => undefined}
+        resetBranchFilters={() => undefined}
+        resetLocationFilters={() => undefined}
+        copyVisibleBranches={async () => undefined}
+        copyVisibleLocations={async () => undefined}
+        branchesQuery={{ isLoading: false, isError: false }}
+        locationsQuery={{ isLoading: false, isError: false }}
+        canManageSettings={true}
+        onUpdateBranch={async () => undefined}
+        onDeleteBranch={async () => undefined}
+        onUpdateLocation={async () => undefined}
+        onDeleteLocation={async () => undefined}
+        branchActionBusy={false}
+        locationActionBusy={false}
+      />,
+    );
+    expect(await screen.findByRole('link', { name: 'الفروع وأماكن التخزين' })).toBeInTheDocument();
+    // Both section headings now carry a live count suffix, e.g. 'الفروع (1)'.
+    expect(await screen.findByRole('heading', { level: 3, name: /^الفروع \(\d+\)$/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 3, name: /^المخازن والمواقع \(\d+\)$/ })).toBeInTheDocument();
+
+    cleanup();
+    installGlobalAppFetchMock();
+    renderSettingsShell(
+      'users',
+      <Card title="المستخدمون والصلاحيات">
+        <div>إدارة المستخدمين</div>
+      </Card>,
+    );
+    expect(await screen.findByRole('link', { name: 'المستخدمون والصلاحيات' })).toBeInTheDocument();
+    expect(await screen.findByText('إدارة المستخدمين')).toBeInTheDocument();
+
+    cleanup();
+    installGlobalAppFetchMock();
+    renderSettingsShell(
+      'backup',
+      <SettingsBackupImportSection
+        snapshots={[]}
+        autoBackupEnabled={false}
+        canManageBackups={true}
+        backupBusy={false}
+        backupConfigQuery={{ isLoading: false, isError: false }}
+        backupFolderPathDraft=""
+        setBackupFolderPathDraft={() => undefined}
+        backupAutoEnabledDraft={false}
+        setBackupAutoEnabledDraft={() => undefined}
+        backupFrequencyDraft="daily"
+        setBackupFrequencyDraft={() => undefined}
+        backupTimeDraft="03:00"
+        setBackupTimeDraft={() => undefined}
+        backupWeeklyDayDraft={0}
+        setBackupWeeklyDayDraft={() => undefined}
+        backupSelectedFileName=""
+        backupMessage=""
+        backupMessageKind="success"
+        backupResult={null}
+        restoreSnapshotId=""
+        handleBackupDownload={() => undefined}
+        saveBackupConfig={async () => undefined}
+        testBackupFolder={async () => undefined}
+        saveBackupFileToFolderNow={async () => undefined}
+        handleBackupFile={() => undefined}
+        handleSnapshotDownload={() => undefined}
+        onRequestRestoreFile={() => undefined}
+        onRequestRestoreSnapshot={() => undefined}
+        importProductsPending={false}
+        importCustomersPending={false}
+        importSuppliersPending={false}
+        importOpeningStockPending={false}
+        importProducts={async () => ({ ok: true })}
+        importCustomers={async () => ({ ok: true })}
+        importSuppliers={async () => ({ ok: true })}
+        importOpeningStock={async () => ({ ok: true })}
+        downloadTemplate={() => undefined}
+      />,
+    );
+    expect(await screen.findByRole('link', { name: 'النسخ والبيانات والصيانة' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /تنزيل نسخة احتياطية/ })
+    ).toBeInTheDocument();
+  });
+
+  it('covers products table interactions', async () => {
+    const user = userEvent.setup();
+    // ProductsTableCard renders <CurrencySymbol/>, which reads settings through React Query.
+    render(
+      <MemoryRouter>
+        <AppProviders>
+          <ProductsTableHarness />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('مياه معدنية')).toBeInTheDocument();
+    await user.click(screen.getByText('مياه معدنية'));
+    expect(await screen.findByText('تم فتح وضع التعديل')).toBeInTheDocument();
+  });
+
+  it('covers purchases table details', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <AppProviders>
+          <PurchasesHarness />
+        </AppProviders>
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByText('فتح تفاصيل اختبارية'));
+    // PurchaseDetailCard's root is a <div class="purchase-detail-card-shell"> now, not a
+    // <section>, so scoping via closest('section') silently fell back to document.body and
+    // matched the same supplier name in the table row as well.
+    const detailCard = screen
+      .getByRole('heading', { level: 3, name: 'تفاصيل PO-1001' })
+      .closest('.purchase-detail-card-shell');
+    expect(detailCard).not.toBeNull();
+    expect(within(detailCard as HTMLElement).getByText('مورد رئيسي')).toBeInTheDocument();
+    // The detail card renders the line items twice: a desktop table plus the mobile card list.
+    expect(within(detailCard as HTMLElement).getAllByText('مياه معدنية').length).toBeGreaterThan(0);
+  });
+});

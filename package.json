@@ -1,0 +1,161 @@
+{
+  "name": "zsystems-frontend",
+  "private": true,
+  "version": "1.1.40",
+  "type": "module",
+  "main": "index.html",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "npm run repair:permissions && node ./node_modules/typescript/lib/tsc.js -b && node ./node_modules/vite/bin/vite.js build",
+    "build:portable": "npm run repair:permissions && node ./node_modules/typescript/lib/tsc.js -b && node ./node_modules/vite/bin/vite.js build --mode portable",
+    "build:electron-frontend": "npm run repair:permissions && node ./node_modules/typescript/lib/tsc.js -b && node ./node_modules/vite/bin/vite.js build --mode electron",
+    "build:exe": "npm run build:electron-frontend && node ../scripts/sync-electron-backend.cjs && node ../scripts/build-electron-release.cjs",
+    "bump-build": "node scripts/bump-build.cjs",
+    "mobile:build": "npm run build && node ../scripts/sync-capacitor-android.cjs",
+    "mobile:sync": "node ../scripts/sync-capacitor-android.cjs",
+    "mobile:apk": "node ../scripts/build-apk.cjs",
+    "mobile:aab": "node ../scripts/build-aab.cjs",
+    "start:exe": "electron .",
+    "preview": "vite preview",
+    "qa:routes": "node scripts/route-qa.mjs",
+    "qa:features": "node scripts/feature-structure-check.mjs && node scripts/feature-boundary-check.mjs",
+    "qa": "npm run lint && npm run qa:functional && npm run qa:api && npm run qa:routes && npm run qa:architecture && npm run build",
+    "qa:functional": "node scripts/functional-smoke.mjs && node scripts/feature-route-map.mjs",
+    "qa:composition": "node scripts/page-composition-check.mjs && node scripts/feature-contract-check.mjs",
+    "qa:api": "node scripts/api-contract-alignment.mjs && node scripts/api-envelope-check.mjs && node scripts/api-call-coverage-check.mjs",
+    "qa:decoupling": "node scripts/feature-api-decoupling-check.mjs",
+    "qa:critical": "node scripts/critical-flow-check.mjs",
+    "qa:route-live": "node scripts/route-live-sweep.mjs",
+    "qa:guards": "node scripts/route-guard-check.mjs",
+    "qa:live-flows": "node scripts/purchase-inventory-live-flow-check.mjs",
+    "qa:split": "node scripts/code-splitting-check.mjs",
+    "qa:perf": "node scripts/perf-budget-check.mjs",
+    "qa:perf:dist": "node scripts/perf-budget-check.mjs --dist",
+    "qa:rc": "node scripts/release-candidate-check.mjs",
+    "qa:contracts": "node scripts/api-mutation-envelope-check.mjs",
+    "qa:release": "node scripts/release-audit.mjs",
+    "qa:commercial-ready": "npm run qa:guards && npm run qa:critical && npm run qa:rc && npm run qa:release",
+    "repair:permissions": "node scripts/fix-binary-permissions.cjs",
+    "qa:phase23": "node scripts/release-candidate-check.mjs",
+    "qa:phase57": "node scripts/run-phase60-qa.mjs",
+    "qa:phase58": "node scripts/run-phase60-qa.mjs",
+    "qa:phase59": "node scripts/run-phase60-qa.mjs",
+    "qa:phase60": "node scripts/run-phase60-qa.mjs",
+    "typecheck": "node ./node_modules/typescript/lib/tsc.js -b",
+    "lint": "node ./node_modules/eslint/bin/eslint.js .",
+    "lint:fix": "node ./node_modules/eslint/bin/eslint.js . --fix",
+    "qa:architecture": "node scripts/feature-structure-check.mjs && node scripts/feature-boundary-check.mjs && node scripts/import-layer-check.mjs && node scripts/dev-proxy-check.mjs && node scripts/password-policy-sync-check.mjs && node scripts/literal-interpolation-check.mjs && node scripts/auth-setup-hardening-check.mjs && node scripts/auth-ui-test-coverage-check.mjs && node scripts/desktop-mobile-isolation-check.mjs",
+    "qa:uat": "npm run qa:guards && npm run qa:critical && npm run qa:release",
+    "test": "npm run test:run",
+    "test:run": "node ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ./node_modules/vitest/vitest.mjs",
+    "qa:tests": "npm run test:run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/core": "^7.6.9",
+    "@capacitor/haptics": "^7.0.5",
+    "@capacitor/network": "^7.0.4",
+    "@capacitor/preferences": "^7.0.4",
+    "@capacitor/splash-screen": "^7.0.5",
+    "@capacitor/status-bar": "^7.0.6",
+    "@hookform/resolvers": "^5.2.2",
+    "@sentry/react": "^10.64.0",
+    "@tanstack/react-query": "^5.90.5",
+    "browser-image-compression": "^2.0.2",
+    "html2canvas": "^1.4.1",
+    "html5-qrcode": "^2.3.8",
+    "i18next": "^26.3.3",
+    "jspdf": "^4.2.1",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-hook-form": "^7.66.0",
+    "react-i18next": "^17.0.8",
+    "react-router-dom": "^7.9.4",
+    "recharts": "^3.8.1",
+    "xlsx": "^0.18.5",
+    "zod": "^4.1.11",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/cli": "^7.6.9",
+    "@capacitor/ios": "^7.6.9",
+    "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.61.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.6.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "electron": "^30.1.2",
+    "electron-builder": "^26.15.3",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "jsdom": "^29.0.2",
+    "ts-morph": "^28.0.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.58.0",
+    "vite": "^7.1.12",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.4"
+  },
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "build": {
+    "appId": "com.zsystems.pos",
+    "productName": "ZSystems POS",
+    "asarUnpack": [
+      "electron/backend/**/*",
+      "dist/**/*"
+    ],
+    "directories": {
+      "output": "../release"
+    },
+    "extraFiles": [
+      {
+        "from": "../portable/runtime",
+        "to": "runtime",
+        "filter": [
+          "**/*",
+          "!data",
+          "!data/**",
+          "!logs",
+          "!logs/**"
+        ]
+      },
+      {
+        "from": "../portable/tools/launcher",
+        "to": "tools/launcher"
+      },
+      {
+        "from": "../zmt.bat",
+        "to": "zmt.bat"
+      },
+      {
+        "from": "../scripts/zmt.cjs",
+        "to": "scripts/zmt.cjs"
+      },
+      {
+        "from": "../scripts/zmt.ps1",
+        "to": "scripts/zmt.ps1"
+      }
+    ],
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "public/logo_cropped.png"
+    }
+  }
+}

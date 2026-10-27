@@ -1,0 +1,315 @@
+import { useTranslation } from 'react-i18next';
+import { Button } from '@/shared/ui/button';
+import { SubmitButton } from '@/shared/components/submit-button';
+import { DataTable } from '@/shared/ui/data-table';
+import { MutationFeedback } from '@/shared/components/mutation-feedback';
+import type { Branch } from '@/types/domain';
+import { SINGLE_STORE_MODE } from '@/config/product-scope';
+import type { ManagedUserRecord } from '@/features/settings/api/settings.api';
+import { USER_ROLE_TEMPLATES, formatDateTime } from '@/features/settings/components/user-management.shared';
+import type { UserBulkAction } from '@/features/settings/hooks/useUserManagementController';
+import type { SetupStepKey } from '@/features/settings/hooks/useFirstRunSetupFlow';
+import {
+  UserManagementBulkToolbar,
+  UserManagementQuickActions,
+  UserManagementStatsFilters,
+} from '@/features/settings/components/user-management/UserManagementListControls';
+import {
+  UserManagementBranchAccess,
+  UserManagementPermissionGroups,
+} from '@/features/settings/components/user-management/UserManagementPermissionGroups';
+import { UserManagementEditorCard } from '@/features/settings/components/user-management-panels/UserManagementEditorCard';
+import { UserBulkActionDialog, UserDeleteDialog } from '@/features/settings/components/user-management-panels/UserManagementDialogs';
+import { UserManagementSetupHeader } from '@/features/settings/components/user-management-panels/UserManagementSetupHeader';
+import { useAuthStore } from '@/stores/auth-store';
+import { resolveCurrentVertical } from '@/shared/verticals/vertical-scope';
+
+
+export function UserManagementListPanel({
+  managedUsers,
+  summary,
+  selectedUserKey,
+  selectedIds,
+  userSearch,
+  userFilter,
+  page,
+  pageSize,
+  totalItems,
+  onNewUser,
+  onApplyRolePermissions,
+  onApplyTemplate,
+  activeTemplate,
+  onCopyPermissions,
+  onUserSearchChange,
+  onUserFilterChange,
+  onLoadUser,
+  onSelectedIdsChange,
+  onPageChange,
+  onPageSizeChange,
+  onBulkAction,
+  disableBulkSummary,
+  onOpenDetails,
+  setupMode = false
+}: {
+  managedUsers: ManagedUserRecord[];
+  summary: { totalItems: number; superAdmins: number; admins: number; cashiers: number; inactive: number; locked: number; };
+  selectedUserKey: string;
+  selectedIds: string[];
+  userSearch: string;
+  userFilter: 'all' | 'super-admins' | 'admins' | 'cashiers' | 'inactive' | 'locked';
+  page: number;
+  pageSize: number;
+  onNewUser: () => void;
+  onApplyRolePermissions: () => void;
+  onApplyTemplate: (templateKey: keyof typeof USER_ROLE_TEMPLATES) => void;
+  onCopyPermissions: () => void;
+  onUserSearchChange: (value: string) => void;
+  onUserFilterChange: (value: 'all' | 'super-admins' | 'admins' | 'cashiers' | 'inactive' | 'locked') => void;
+  onLoadUser: (user: ManagedUserRecord) => void;
+  onSelectedIdsChange: (ids: string[]) => void;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  totalItems: number;
+  onBulkAction: (action: UserBulkAction) => void;
+  disableBulkSummary: {
+    selectedCount: number;
+    disableEligibleCount: number;
+    protectedCount: number;
+    canRunDisable: boolean;
+    reasonSummaries: string[];
+    helperText: string;
+  };
+  onOpenDetails: (user: ManagedUserRecord) => void;
+  setupMode?: boolean;
+  activeTemplate?: string | null;
+}) {
+  const { t } = useTranslation();
+  const tenant = useAuthStore((s) => s.tenant);
+  const vertical = resolveCurrentVertical(tenant);
+  const isMaritime = vertical === 'maritime';
+  const isContracting = vertical === 'contracting';
+
+  const currentRoleLabel: Record<ManagedUserRecord['role'], string> = {
+    super_admin: 'سوبر أدمن',
+    admin: isMaritime ? 'مدير ملاحي' : isContracting ? 'مدير مشاريع' : 'مدير نظام',
+    cashier: isMaritime ? 'مسؤول عمليات' : isContracting ? 'مهندس موقع' : 'كاشير'
+  };
+
+  return (
+    <div className="list-stack">
+      <UserManagementQuickActions
+        setupMode={setupMode}
+        onNewUser={onNewUser}
+        onApplyRolePermissions={onApplyRolePermissions}
+        onApplyTemplate={onApplyTemplate}
+        activeTemplate={activeTemplate}
+        onCopyPermissions={onCopyPermissions}
+      />
+      {!setupMode ? (
+        <UserManagementStatsFilters
+          summary={summary}
+          userSearch={userSearch}
+          userFilter={userFilter}
+          onUserSearchChange={onUserSearchChange}
+          onUserFilterChange={onUserFilterChange}
+        />
+      ) : null}
+      {!setupMode ? (
+        <UserManagementBulkToolbar
+          selectedIds={selectedIds}
+          onSelectedIdsChange={onSelectedIdsChange}
+          onBulkAction={onBulkAction}
+          disableBulkSummary={disableBulkSummary}
+        />
+      ) : null}
+      <DataTable
+        rows={managedUsers}
+        rowKey={(user) => String(user.id || user.username)}
+        onRowClick={onLoadUser}
+        rowClassName={(user) => selectedUserKey === String(user.id || user.username) ? 'table-row-selected' : undefined}
+        rowTitle={(user) => `فتح المستخدم ${user.username}`}
+        selection={{
+          selectedKeys: selectedIds,
+          onChange: onSelectedIdsChange,
+          checkboxLabel: (user) => `تحديد المستخدم ${user.username}`
+        }}
+        pagination={{
+          page,
+          pageSize,
+          totalItems,
+          onPageChange,
+          onPageSizeChange,
+          itemLabel: t('settings.user_management_panels.s0', "مستخدم")
+        }}
+        columns={[
+          {
+            key: 'identity',
+            header: t('settings.user_management_panels.s1', "المستخدم"),
+            cell: (user) => (
+              <div>
+                <strong>{user.name || user.username}</strong>
+                <div className="muted small">{user.username} · {currentRoleLabel[user.role]} · {user.isActive === false ? t('settings.user_management_panels.s2', "موقوف") : t('settings.user_management_panels.s3', "نشط")}</div>
+              </div>
+            )
+          },
+          {
+            key: 'access',
+            header: t('settings.user_management_panels.s4', "الوصول"),
+            cell: (user) => (
+              <div>
+                <div className="muted small">{t('settings.user_management_panels.s5', "آخر دخول:")} {formatDateTime(user.lastLoginAt)}</div>
+                <div className="muted small">{t('settings.user_management_panels.s6', "محاولات فاشلة:")} {user.failedLoginCount || 0}{user.lockedUntil ? ` · مقفول حتى ${formatDateTime(user.lockedUntil)}` : ''}</div>
+              </div>
+            )
+          },
+          {
+            key: 'branches',
+            header: SINGLE_STORE_MODE ? t('settings.user_management_panels.s7', "الدور / الصلاحيات") : isMaritime ? t('settings.user_management_panels.s8', "المكاتب / الصلاحيات") : isContracting ? t('settings.user_management_panels.s9', "المواقع / الصلاحيات") : t('settings.user_management_panels.s10', "الفروع / الصلاحيات"),
+            cell: (user) => (
+              <div>
+                {!SINGLE_STORE_MODE ? <div className="muted small">{isMaritime ? t('settings.user_management_panels.s11', "المكاتب") : isContracting ? t('settings.user_management_panels.s12', "المواقع") : t('settings.user_management_panels.s13', "الفروع")}: {(user.branchIds || []).length || 0} {t('settings.user_management_panels.s14', "· افتراضي:")} {user.defaultBranchId || '—'}</div> : null}
+                <div className="muted small">{t('settings.user_management_panels.s15', "الصلاحيات:")} {(user.permissions || []).length}</div>
+              </div>
+            )
+          },
+          {
+            key: 'actions',
+            header: t('settings.user_management_panels.s16', "إجراءات"),
+            cell: (user) => (
+              <div className="actions compact-actions">
+                <Button type="button" variant="secondary" onClick={(event) => { event.stopPropagation(); onLoadUser(user); }}>{t('settings.user_management_panels.s17', "فتح")}</Button>
+                <Button type="button" variant="secondary" onClick={(event) => { event.stopPropagation(); onOpenDetails(user); }}>{t('settings.user_management_panels.s18', "تفاصيل")}</Button>
+                <span className="nav-pill">{user.mustChangePassword ? t('settings.user_management_panels.s19', "تغيير مطلوب") : t('settings.user_management_panels.s20', "مستقر")}</span>
+              </div>
+            )
+          }
+        ]}
+      />
+    </div>
+  );
+}
+
+export function UserManagementEditorPanel({
+  branches,
+  draft,
+  currentUserRole,
+  isCurrentUserSelected,
+  selectedDraftDisableProtection,
+  canDirectlyDisableSelected,
+  canUnlockSelected,
+  canDeleteSelected,
+  isPending,
+  isError,
+  isSuccess,
+  error,
+  statusMessage,
+  onDraftChange,
+  onApplyRolePermissions,
+  onToggleBranch,
+  onTogglePermission,
+  onReset,
+  onUnlock,
+  onDelete,
+  onSave,
+  setupMode = false,
+  setupStepKey = null
+}: {
+  branches: Branch[];
+  draft: ManagedUserRecord;
+  currentUserRole: string;
+  isCurrentUserSelected: boolean;
+  selectedDraftDisableProtection: 'super_admin' | 'current_user' | 'last_active_privileged' | null;
+  canDirectlyDisableSelected: boolean;
+  canUnlockSelected: boolean;
+  canDeleteSelected: boolean;
+  isPending: boolean;
+  isError: boolean;
+  isSuccess: boolean;
+  error: unknown;
+  statusMessage: string;
+  onDraftChange: (updater: (current: ManagedUserRecord) => ManagedUserRecord) => void;
+  onApplyRolePermissions: (role: 'super_admin' | 'admin' | 'cashier') => void;
+  onToggleBranch: (branchId: string) => void;
+  onTogglePermission: (permission: string) => void;
+  onReset: () => void;
+  onUnlock: () => void;
+  onDelete: () => void;
+  onSave: () => void;
+  setupMode?: boolean;
+  setupStepKey?: SetupStepKey | null;
+}) {
+  const { t } = useTranslation();
+  const showInlineValidationError = Boolean(statusMessage) && !isPending && !isSuccess && !isError;
+  const feedbackError = isError ? error : (showInlineValidationError ? statusMessage : null);
+
+  return (
+    <div className="page-stack" style={{ gap: '8px' }}>
+      {setupMode
+        ? <UserManagementSetupHeader draft={draft} setupMode={setupMode} setupStepKey={setupStepKey} isCurrentUserSelected={isCurrentUserSelected} />
+        : <UserManagementEditorCard
+            branches={branches}
+            draft={draft}
+            currentUserRole={currentUserRole}
+            isCurrentUserSelected={isCurrentUserSelected}
+            onDraftChange={onDraftChange}
+            onApplyRolePermissions={onApplyRolePermissions}
+            selectedDraftDisableProtection={selectedDraftDisableProtection}
+            canDirectlyDisableSelected={canDirectlyDisableSelected}
+          />}
+
+      {setupMode ? (
+        <UserManagementEditorCard
+          branches={branches}
+          draft={draft}
+          currentUserRole={currentUserRole}
+          isCurrentUserSelected={isCurrentUserSelected}
+          onDraftChange={onDraftChange}
+          onApplyRolePermissions={onApplyRolePermissions}
+          selectedDraftDisableProtection={selectedDraftDisableProtection}
+          canDirectlyDisableSelected={canDirectlyDisableSelected}
+        />
+      ) : null}
+
+      {!SINGLE_STORE_MODE ? <UserManagementBranchAccess branches={branches} selectedBranchIds={draft.branchIds} onToggleBranch={onToggleBranch} /> : null}
+      <UserManagementPermissionGroups permissions={draft.permissions} role={draft.role} onTogglePermission={onTogglePermission} />
+
+      <MutationFeedback
+        isError={isError || showInlineValidationError}
+        isSuccess={isSuccess}
+        error={feedbackError}
+        errorFallback={statusMessage || t('settings.user_management_panels.s21', "تعذرت العملية على المستخدم")}
+        successText={statusMessage || t('settings.user_management_panels.s22', "تم تحديث بيانات المستخدم.")}
+      />
+
+      <div className="actions" style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '8px',
+        marginTop: '4px',
+        paddingTop: '6px',
+        borderTop: '1px solid #e2e8f0',
+      }}>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <Button type="button" variant="secondary" onClick={onReset} disabled={isPending} style={{ height: '32px', padding: '0 12px', fontSize: '0.82rem' }}>{t('settings.user_management_panels.s23', "إعادة القيم")}</Button>
+          {canUnlockSelected ? <Button type="button" variant="secondary" onClick={onUnlock} disabled={isPending} style={{ height: '32px', padding: '0 12px', fontSize: '0.82rem' }}>{t('settings.user_management_panels.s24', "فتح القفل")}</Button> : null}
+          {canDeleteSelected ? <Button type="button" variant="danger" onClick={onDelete} disabled={isPending} style={{ height: '32px', padding: '0 12px', fontSize: '0.82rem' }}>{t('settings.user_management_panels.s25', "حذف المستخدم")}</Button> : null}
+        </div>
+        <SubmitButton
+          type="button"
+          onClick={onSave}
+          isPending={isPending}
+          isSuccess={isSuccess}
+          disabled={isPending}
+          idleText={t('settings.user_management_panels.s27', "حفظ المستخدم")}
+          pendingText={t('settings.user_management_panels.s26', "جاري الحفظ...")}
+          successText={statusMessage || t('settings.user_management_panels.s22', "تم تحديث بيانات المستخدم.")}
+          style={{ height: '32px', padding: '0 18px', fontSize: '0.84rem', fontWeight: 700, backgroundColor: '#170e5e', color: '#fff' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export { UserDeleteDialog, UserBulkActionDialog };

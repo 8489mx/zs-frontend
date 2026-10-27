@@ -1,0 +1,162 @@
+import { useTranslation } from 'react-i18next';
+import { StandardDialog, StandardDialogFooter } from '@/shared/components/StandardDialog';
+import { Button } from '@/shared/ui/button';
+import { PrinterIcon } from '@/shared/components/icons/AppIcons';
+import { formatCurrency, formatCurrencyWithSymbol } from '@/lib/format';
+import type { WithholdingTaxRecord, Form41SummaryResponse } from '@/features/accounting/api/accounting.api';
+import { WHT_TYPE_LABELS, QUARTERS } from './types';
+
+interface PrintWhtModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedQuarter: string;
+  selectedYear: number;
+  reportData?: Form41SummaryResponse;
+  filteredTransactions: WithholdingTaxRecord[];
+}
+
+export function PrintWhtModal({
+  isOpen,
+  onClose,
+  selectedQuarter,
+  selectedYear,
+  reportData,
+  filteredTransactions,
+}: PrintWhtModalProps) {
+  const { t: __t } = useTranslation();
+  if (!isOpen) return null;
+
+  const qObj = QUARTERS.find((q) => q.id === selectedQuarter);
+
+  return (
+    <StandardDialog
+      open={isOpen}
+      onClose={onClose}
+      title={__t('accounting.withholding_tax.print_wht_modal.s0', "إقرار نموذج 41 ضرائب (الخصم والتحصيل تحت حساب الضريبة)")}
+      subtitle={`عن ${qObj?.label || __t('accounting.withholding_tax.print_wht_modal.s1', "الربع المحدد")} سنة ${selectedYear}`}
+      size="xl"
+    >
+      {/* Printable Form 41 Official Paper */}
+      <div style={{
+        border: '1px solid #cbd5e1',
+        borderRadius: '12px',
+        padding: '24px',
+        backgroundColor: '#ffffff',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '18px',
+        fontSize: '12px',
+        color: '#0f172a',
+      }}>
+        {/* Official Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #0f172a', paddingBottom: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '14px', fontWeight: 800, margin: 0 }}>{__t('accounting.withholding_tax.print_wht_modal.s2', "جمهورية مصر العربية - وزارة المالية")}</h3>
+            <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#334155', margin: '4px 0' }}>{__t('accounting.withholding_tax.print_wht_modal.s3', "مصلحة الضرائب المصرية")}</h4>
+            <p style={{ fontSize: '11px', color: '#64748b', margin: 0 }}>{__t('accounting.withholding_tax.print_wht_modal.s4', "إدارة تجميع نماذج الخصم والتحصيل")}</p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ border: '2px solid #0f172a', padding: '6px 16px', borderRadius: '8px', fontWeight: 800, fontSize: '15px', backgroundColor: '#f8fafc' }}>
+              {__t('accounting.withholding_tax.print_wht_modal.s5', "نموذج 41 ضرائب")}
+            </div>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569', display: 'block', marginTop: '4px' }}>
+              {__t('accounting.withholding_tax.print_wht_modal.s6', "عن")} {qObj?.label} {__t('accounting.withholding_tax.print_wht_modal.s7', "سنة")} {selectedYear}
+            </span>
+          </div>
+        </div>
+
+        {/* Summary Stats Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', backgroundColor: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+          <div>
+            <span style={{ color: '#64748b', display: 'block' }}>{__t('accounting.withholding_tax.print_wht_modal.s8', "إجمالي عدد المعاملات:")}</span>
+            <span style={{ fontWeight: 800, fontSize: '14px', color: '#0f172a' }}>{reportData?.total_count || 0}</span>
+          </div>
+          <div>
+            <span style={{ color: '#64748b', display: 'block' }}>{__t('accounting.withholding_tax.print_wht_modal.s9', "إجمالي وعاء التعامل:")}</span>
+            <span style={{ fontWeight: 800, fontSize: '14px', color: '#0f172a' }}>{formatCurrencyWithSymbol(reportData?.total_base_amount || 0)}</span>
+          </div>
+          <div>
+            <span style={{ color: '#64748b', display: 'block' }}>{__t('accounting.withholding_tax.print_wht_modal.s10', "إجمالي الضريبة واجبة التوريد:")}</span>
+            <span style={{ fontWeight: 800, fontSize: '14px', color: '#059669' }}>{formatCurrencyWithSymbol(reportData?.total_tax_amount || 0)}</span>
+          </div>
+        </div>
+
+        {/* Printable Table */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', textAlign: 'right', borderCollapse: 'collapse', border: '1px solid #cbd5e1', fontSize: '11px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #cbd5e1' }}>
+                <th style={{ padding: '8px', borderRight: '1px solid #cbd5e1' }}>{__t('accounting.withholding_tax.print_wht_modal.s11', "م")}</th>
+                <th style={{ padding: '8px', borderRight: '1px solid #cbd5e1' }}>{__t('accounting.withholding_tax.print_wht_modal.s12', "اسم الممول")}</th>
+                <th style={{ padding: '8px', borderRight: '1px solid #cbd5e1' }}>{__t('accounting.withholding_tax.print_wht_modal.s13', "الرقم الضريبي")}</th>
+                <th style={{ padding: '8px', borderRight: '1px solid #cbd5e1' }}>{__t('accounting.withholding_tax.print_wht_modal.s14', "رقم الفاتورة")}</th>
+                <th style={{ padding: '8px', borderRight: '1px solid #cbd5e1' }}>{__t('accounting.withholding_tax.print_wht_modal.s15', "تاريخها")}</th>
+                <th style={{ padding: '8px', borderRight: '1px solid #cbd5e1' }}>{__t('accounting.withholding_tax.print_wht_modal.s16', "طبيعة التعامل")}</th>
+                <th style={{ padding: '8px', borderRight: '1px solid #cbd5e1' }}>{__t('accounting.withholding_tax.print_wht_modal.s17', "النسبة")}</th>
+                <th style={{ padding: '8px', borderRight: '1px solid #cbd5e1' }}>{__t('accounting.withholding_tax.print_wht_modal.s18', "قيمة التعامل")}</th>
+                <th style={{ padding: '8px' }}>{__t('accounting.withholding_tax.print_wht_modal.s19', "الضريبة المحصلة")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTransactions.map((t, i) => (
+                <tr key={t.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '6px 8px', borderRight: '1px solid #cbd5e1', textAlign: 'center' }}>{i + 1}</td>
+                  <td style={{ padding: '6px 8px', borderRight: '1px solid #cbd5e1', fontWeight: 600 }}>{t.partner_name}</td>
+                  <td style={{ padding: '6px 8px', borderRight: '1px solid #cbd5e1', fontFamily: 'monospace' }}>{t.tax_id_number || '-'}</td>
+                  <td style={{ padding: '6px 8px', borderRight: '1px solid #cbd5e1', fontFamily: 'monospace' }}>{t.invoice_number}</td>
+                  <td style={{ padding: '6px 8px', borderRight: '1px solid #cbd5e1' }}>{t.invoice_date}</td>
+                  <td style={{ padding: '6px 8px', borderRight: '1px solid #cbd5e1' }}>{WHT_TYPE_LABELS[t.wht_type]?.label || t.wht_type}</td>
+                  <td style={{ padding: '6px 8px', borderRight: '1px solid #cbd5e1', textAlign: 'center' }}>{t.wht_rate}%</td>
+                  <td style={{ padding: '6px 8px', borderRight: '1px solid #cbd5e1', fontWeight: 700 }}>{formatCurrency(t.base_amount)}</td>
+                  <td style={{ padding: '6px 8px', fontWeight: 700, color: '#065f46' }}>{formatCurrency(t.tax_amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Official Declarations & Signatures */}
+        <div style={{ paddingTop: '20px', borderTop: '1px solid #cbd5e1', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <p style={{ fontSize: '11px', color: '#475569', lineHeight: 1.6, textAlign: 'justify', margin: 0 }}>
+            {__t('accounting.withholding_tax.print_wht_modal.s20', "أقر أنا الموقع أدناه بصفتي المسئول عن المنشأة بأن كافة البيانات والمعاملات والمبالغ الموضحة بهذا الإقرار صحيحة وحقيقية ومطابقة للدفاتر والسجلات والمستندات المؤيدة، وأنه تم خصم المبالغ الموضحة وتوريدها لمصلحة الضرائب المصرية طبقاً لأحكام القانون 91 لسنة 2005 وتعديلاته.")}
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', paddingTop: '16px', textAlign: 'center' }}>
+            <div>
+              <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '36px' }}>{__t('accounting.withholding_tax.print_wht_modal.s21', "المحاسب القانوني المعتمد")}</span>
+              <div style={{ borderBottom: '1px solid #94a3b8', width: '180px', margin: '0 auto' }} />
+            </div>
+            <div>
+              <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '36px' }}>{__t('accounting.withholding_tax.print_wht_modal.s22', "توقيع وخاتم المنشأة / الممول")}</span>
+              <div style={{ borderBottom: '1px solid #94a3b8', width: '180px', margin: '0 auto' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <StandardDialogFooter>
+        <Button variant="secondary" onClick={onClose} style={{ padding: '8px 18px', fontSize: '13px', borderRadius: '8px' }}>
+          {__t('accounting.withholding_tax.print_wht_modal.s23', "إغلاق")}
+        </Button>
+        <Button
+          onClick={() => window.print()}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            backgroundColor: '#170e5e',
+            color: '#ffffff',
+            padding: '8px 20px',
+            fontSize: '13px',
+            fontWeight: 700,
+            borderRadius: '8px',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          <PrinterIcon size={14} />
+          <span>{__t('accounting.withholding_tax.print_wht_modal.s24', "طباعة A4")}</span>
+        </Button>
+      </StandardDialogFooter>
+    </StandardDialog>
+  );
+}

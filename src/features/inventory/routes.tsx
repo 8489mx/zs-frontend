@@ -1,0 +1,76 @@
+import { Navigate } from 'react-router-dom';
+import { createLazyRoute } from '@/app/router/lazy-route';
+import type { FeatureRouteModule } from '@/app/router/types';
+
+const inventoryPage = createLazyRoute(() => import('@/features/inventory/pages/InventoryPage').then((module) => ({ default: module.InventoryPage })));
+const newIssueOrderPage = createLazyRoute(() => import('@/features/inventory/pages/NewIssueOrderPage').then((module) => ({ default: module.NewIssueOrderPage })));
+const warehousesGridPage = createLazyRoute(() => import('@/features/inventory/pages/WarehousesGridPage').then((module) => ({ default: module.WarehousesGridPage })));
+const warehouseDetailsPage = createLazyRoute(() => import('@/features/inventory/pages/WarehouseDetailsPage').then((module) => ({ default: module.WarehouseDetailsPage })));
+const inventoryTreePage = createLazyRoute(() => import('@/features/inventory/pages/InventoryTreePage').then((module) => ({ default: module.InventoryTreePage })));
+const inventoryBatchesPage = createLazyRoute(() => import('@/features/inventory/pages/InventoryBatchesPage').then((module) => ({ default: module.InventoryBatchesPage })));
+const warehouseBinsPage = createLazyRoute(() => import('@/features/inventory/pages/WarehouseBinsPage').then((module) => ({ default: module.WarehouseBinsPage })));
+const packagesManagementPage = createLazyRoute(() => import('@/features/inventory/pages/PackagesManagementPage').then((module) => ({ default: module.PackagesManagementPage })));
+const qualityDashboardPage = createLazyRoute(() => import('@/features/inventory/pages/QualityDashboardPage').then((module) => ({ default: module.QualityDashboardPage })));
+const reorderingRulesPage = createLazyRoute(() => import('@/features/inventory/components/reordering/ReorderingRulesPage').then((module) => ({ default: module.ReorderingRulesPage })));
+
+export const inventoryRouteModule: FeatureRouteModule = {
+  routes: [
+    { path: 'inventory', element: inventoryPage },
+    { path: 'inventory/reordering', element: reorderingRulesPage },
+    { path: 'inventory/quality', element: qualityDashboardPage },
+    { path: 'inventory/packages', element: packagesManagementPage },
+    { path: 'inventory/bins', element: warehouseBinsPage },
+    { path: 'inventory/warehouses', element: warehousesGridPage },
+    { path: 'inventory/warehouses-management', element: <Navigate to="/inventory/warehouses" replace /> },
+    { path: 'inventory/warehouses/:id', element: warehouseDetailsPage },
+    { path: 'inventory/batches', element: inventoryBatchesPage },
+    { path: 'inventory/issue-order/new', element: newIssueOrderPage },
+    { path: 'inventory/tree', element: inventoryTreePage },
+    { path: 'inventory-reordering', element: <Navigate to="/inventory/reordering" replace /> },
+    { path: 'inventory-tree', element: <Navigate to="/inventory/tree" replace /> },
+    { path: 'inventory-packages', element: <Navigate to="/inventory/packages" replace /> },
+    { path: 'inventory-quality', element: <Navigate to="/inventory/quality" replace /> },
+    { path: 'inventory-bins', element: <Navigate to="/inventory/bins" replace /> },
+    { path: 'inventory-warehouses', element: <Navigate to="/inventory/warehouses" replace /> },
+    { path: 'inventory/issue-orders', element: <Navigate to="/inventory/transfers" replace /> },
+    { path: 'inventory/transfers', element: inventoryPage },
+    { path: 'inventory/counts', element: inventoryPage },
+    { path: 'inventory/:section', element: inventoryPage }
+  ],
+  navigation: [
+    { 
+      key: 'inventory-issue-orders', 
+      label: 'أذونات الصرف والتحويل', 
+      to: '/inventory/transfers',
+      activePaths: [
+        '/inventory/transfers',
+        '/inventory/issue-orders',
+        '/inventory/issue-order/new'
+      ]
+    },
+    { 
+      key: 'inventory', 
+      label: 'جرد وتسويات المخزون', 
+      to: '/inventory/counts', 
+      end: true,
+      activePaths: [
+        '/inventory/counts',
+        '/inventory/damaged',
+        '/inventory/movements',
+        '/inventory/overview'
+      ]
+    },
+    { key: 'inventory-reordering', label: 'قواعد إعادة الطلب (Min/Max)', to: '/inventory/reordering' },
+    { key: 'inventory-quality', label: 'إدارة الجودة والامتثال (QA / NCR)', to: '/inventory/quality' },
+    { key: 'inventory-packages', label: 'الطرود والطبليات (Pack-in-Pack)', to: '/inventory/packages' },
+    { key: 'inventory-batches', label: 'التشغيلات والصلاحيات', to: '/inventory/batches' },
+    { 
+      key: 'inventory-warehouses', 
+      label: 'المستودعات والفروع', 
+      to: '/inventory/warehouses',
+    },
+    { key: 'inventory-bins', label: 'أماكن التخزين والأرفف', to: '/inventory/bins' },
+    { key: 'inventory-tree', label: 'شجرة المخازن', to: '/inventory/tree' },
+    { key: 'inventory-issue-order-new', label: 'إذن صرف جديد', to: '/inventory/issue-order/new' }
+  ]
+};

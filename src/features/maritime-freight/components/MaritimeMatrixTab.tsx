@@ -1,0 +1,369 @@
+import { useTranslation } from 'react-i18next';
+import { useState, useEffect } from 'react';
+import { MaritimeRfq, MaritimeRfqBid, maritimeApi } from '../api/maritime-freight.api';
+import { AppIcons } from '@/shared/components/icons/AppIcons';
+import { CustomSelect } from '@/shared/ui/custom-select';
+
+interface MaritimeMatrixTabProps {
+  rfqs: MaritimeRfq[];
+  selectedRfqId: string | null;
+  onSelectRfqId: (id: string) => void;
+  onApproveBid: (rfq: MaritimeRfq, bid: MaritimeRfqBid) => void;
+  onOpenAddBid: (rfq: MaritimeRfq) => void;
+  onSyncEmails?: () => void;
+  syncing?: boolean;
+}
+
+export function MaritimeMatrixTab({
+  rfqs,
+  selectedRfqId,
+  onSelectRfqId,
+  onApproveBid,
+  onOpenAddBid,
+  onSyncEmails,
+  syncing = false,
+}: MaritimeMatrixTabProps) {
+  const { t } = useTranslation();
+  const activeRfqId = selectedRfqId || (rfqs.length > 0 ? String(rfqs[0].id) : null);
+  const initialRfq = rfqs.find((r) => String(r.id) === String(activeRfqId)) || null;
+  const [currentRfq, setCurrentRfq] = useState<MaritimeRfq | null>(initialRfq);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeRfqId) {
+      const match = rfqs.find((r) => String(r.id) === String(activeRfqId));
+      if (match && (!currentRfq || currentRfq.id !== match.id)) {
+        setCurrentRfq(match);
+      }
+      setLoading(true);
+      maritimeApi.getRfqById(activeRfqId)
+        .then((data) => setCurrentRfq(data))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
+  }, [activeRfqId, rfqs]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* شريط اختيار طلب التسعير */}
+      <div style={{ background: '#ffffff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '280px', maxWidth: '520px' }}>
+          <span style={{ fontWeight: 700, color: '#170e5e', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>{t('maritime_freight.maritime_matrix_tab.s0', "طلب التسعير النشط:")}</span>
+          <div style={{ flex: 1 }}>
+            <CustomSelect
+              value={activeRfqId || ''}
+              onChange={(val) => onSelectRfqId(val)}
+              placeholder={t('maritime_freight.maritime_matrix_tab.s1', "اختر طلب التسعير...")}
+              options={rfqs.map((r) => ({
+                value: String(r.id),
+                label: `${r.rfq_number} — ${r.pol_code} إلى ${r.pod_code} (${r.container_count}x ${r.container_type})`,
+              }))}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {onSyncEmails && (
+            <button
+              type="button"
+              disabled={syncing}
+              onClick={onSyncEmails}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                color: '#170e5e',
+                cursor: syncing ? 'not-allowed' : 'pointer',
+                opacity: syncing ? 0.7 : 1,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+              }}
+              title={t('maritime_freight.maritime_matrix_tab.s2', "سحب وفحص الإيميلات الواردة من الخطوط وقراءتها آلياً")}
+            >
+              <AppIcons.RefreshCw size={15} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+              <span>{syncing ? t('maritime_freight.maritime_matrix_tab.s3', "جاري فحص الإيميلات...") : t('maritime_freight.maritime_matrix_tab.s4', "مزامنة الردود الواردة (Sync Bids)")}</span>
+            </button>
+          )}
+
+          {currentRfq && (
+            <button
+              type="button"
+              onClick={() => onOpenAddBid(currentRfq)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                color: '#1e293b',
+                cursor: 'pointer',
+              }}
+            >
+              <AppIcons.Plus size={16} />
+              <span>{t('maritime_freight.maritime_matrix_tab.s5', "تسجيل عرض سعر يدوي")}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* تفاصيل مسار الطلب النشط بتصميم مؤسسي ناصع */}
+      {currentRfq && (() => {
+        const getCutOffInfo = () => {
+          if (!currentRfq.cut_off_deadline) return null;
+          const diffMs = new Date(currentRfq.cut_off_deadline).getTime() - Date.now();
+          if (diffMs <= 0) {
+            return {
+              expired: true,
+              text: t('maritime_freight.maritime_matrix_tab.s6', "انتهت مهلة المزايدة (جاهز للترسية)"),
+              bg: '#fef3c7',
+              color: '#92400e',
+              border: '#fde68a',
+            };
+          }
+          const hours = Math.floor(diffMs / (1000 * 60 * 60));
+          const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+          return {
+            expired: false,
+            text: `متبقي ${hours > 0 ? `${hours} س و ` : ''}${minutes} دقيقة على غلق المزايدة`,
+            bg: hours <= 2 ? '#fef2f2' : '#f0fdf4',
+            color: hours <= 2 ? '#991b1b' : '#166534',
+            border: hours <= 2 ? '#fecaca' : '#bbf7d0',
+          };
+        };
+
+        const cutOffInfo = getCutOffInfo();
+
+        return (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '16px 20px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{t('maritime_freight.maritime_matrix_tab.s7', "كود الاستفسار الملاحي")}</div>
+                  {currentRfq.urgency_level === 'urgent' && (
+                    <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
+                      {t('maritime_freight.maritime_matrix_tab.s8', "عاجل (Spot 6h)")}
+                    </span>
+                  )}
+                  {currentRfq.auto_awarded && (
+                    <span style={{ fontSize: '0.68rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                      {t('maritime_freight.maritime_matrix_tab.s9', "تمت الترسية آلياً")}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#170e5e', marginTop: '2px' }}>{currentRfq.rfq_number}</div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{t('maritime_freight.maritime_matrix_tab.s10', "المسار والحاويات")}</div>
+                <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', marginTop: '2px' }}>
+                  {currentRfq.pol_name} ({currentRfq.pol_code}) ← {currentRfq.pod_name} ({currentRfq.pod_code})
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '1px' }}>
+                  {currentRfq.container_count}x {currentRfq.container_type} | {currentRfq.commodity_description || t('maritime_freight.maritime_matrix_tab.s11', "عام")} {t('maritime_freight.maritime_matrix_tab.s12', "| شرط:")} {currentRfq.incoterm}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                {cutOffInfo && (
+                  <div style={{ textAlign: 'center', padding: '6px 14px', borderRadius: '8px', background: cutOffInfo.bg, border: `1px solid ${cutOffInfo.border}`, color: cutOffInfo.color }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 600 }}>{t('maritime_freight.maritime_matrix_tab.s13', "مؤقت مهلة عروض الأسعار")}</div>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 800, marginTop: '2px' }}>{cutOffInfo.text}</div>
+                  </div>
+                )}
+
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{t('maritime_freight.maritime_matrix_tab.s14', "أيام السماح المستهدفة")}</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#15803d', marginTop: '2px' }}>
+                    {currentRfq.target_free_days} {t('maritime_freight.maritime_matrix_tab.s15', "يوم")}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {currentRfq.target_rate_max && (
+              <div style={{ fontSize: '0.75rem', color: '#475569', background: '#ffffff', padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontWeight: 700, color: '#170e5e' }}>{t('maritime_freight.maritime_matrix_tab.s16', "شرط الترسية المبكرة:")}</span>
+                <span>{t('maritime_freight.maritime_matrix_tab.s17', "سقف السعر المستهدف $")}{Number(currentRfq.target_rate_max).toLocaleString()} {t('maritime_freight.maritime_matrix_tab.s18', "مع $")}{currentRfq.target_free_days} {t('maritime_freight.maritime_matrix_tab.s19', "يوم سماح (يتم اعتماد أي خط يحقق هذا الشرط فوراً).")}</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* شبكة كروت مقارنة الأسعار */}
+      {loading ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+          {t('maritime_freight.maritime_matrix_tab.s20', "جاري تجهيز مصفوفة المقارنة...")}
+        </div>
+      ) : !currentRfq?.bids || currentRfq.bids.length === 0 ? (
+        <div
+          style={{
+            background: '#ffffff',
+            padding: '48px 24px',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+          }}
+        >
+          <div
+            style={{
+              width: '52px',
+              height: '52px',
+              borderRadius: '14px',
+              background: '#f1f5f9',
+              border: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#64748b',
+            }}
+          >
+            <AppIcons.Mail size={26} />
+          </div>
+          <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#0f172a' }}>
+            {t('maritime_freight.maritime_matrix_tab.s21', "بانتظار ورود عروض أسعار النواقل والخطوط")}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#64748b', maxWidth: '440px', lineHeight: 1.5 }}>
+            {t('maritime_freight.maritime_matrix_tab.s22', "لم يتم تسجيل أو استلام عروض أسعار لهذا الطلب حتى الآن. يمكنك مزامنة الردود الواردة عبر البريد آلياً أو إدخال عرض سعر مستلم يدوياً.")}
+          </div>
+          {currentRfq && (
+            <button
+              type="button"
+              onClick={() => onOpenAddBid(currentRfq)}
+              style={{
+                marginTop: '6px',
+                padding: '8px 18px',
+                background: '#170e5e',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: 700,
+                fontSize: '0.8125rem',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 4px rgba(23, 14, 94, 0.15)',
+              }}
+            >
+              <AppIcons.Plus size={16} />
+              <span>{t('maritime_freight.maritime_matrix_tab.s23', "تسجيل عرض سعر يدوي لهذا الطلب")}</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          {currentRfq.bids.map((bid) => {
+            const isBest = bid.isBestValue;
+            const isAwarded = bid.is_awarded;
+
+            return (
+              <div
+                key={bid.id}
+                style={{
+                  background: '#ffffff',
+                  borderRadius: '12px',
+                  border: isAwarded ? '2px solid #22c55e' : isBest ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                  boxShadow: isBest ? '0 4px 12px rgba(59, 130, 246, 0.12)' : 'none',
+                  padding: '18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '14px',
+                  position: 'relative',
+                }}
+              >
+                {/* شارة الترسية أو أفضل قيمة */}
+                {isAwarded ? (
+                  <span style={{ position: 'absolute', top: '12px', left: '12px', background: '#dcfce7', color: '#15803d', padding: '3px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 800 }}>
+                    {t('maritime_freight.maritime_matrix_tab.s24', "العرض المعتمد")}
+                  </span>
+                ) : isBest ? (
+                  <span style={{ position: 'absolute', top: '12px', left: '12px', background: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 800 }}>
+                    {t('maritime_freight.maritime_matrix_tab.s25', "أفضل قيمة (Best Value)")}
+                  </span>
+                ) : null}
+
+                <div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#170e5e', paddingRight: '0' }}>
+                    {bid.shipping_line_name}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                    {t('maritime_freight.maritime_matrix_tab.s26', "طريقة الاستلام:")} {bid.submission_channel === 'email_auto' ? t('maritime_freight.maritime_matrix_tab.s27', "بريد إلكتروني تلقائي") : bid.submission_channel === 'carrier_portal' ? t('maritime_freight.maritime_matrix_tab.s28', "بوابة الخطوط الإلكترونية") : t('maritime_freight.maritime_matrix_tab.s29', "تسجيل يدوي")}
+                  </div>
+
+                  {/* السعر الإجمالي البارز */}
+                  <div style={{ marginTop: '14px', marginBottom: '14px', textAlign: 'center', background: '#f8fafc', padding: '12px', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{t('maritime_freight.maritime_matrix_tab.s30', "إجمالي تكلفة الشحن والموانئ")}</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#170e5e', marginTop: '2px' }}>
+                      ${Number(bid.total_freight_cost || 0).toLocaleString()}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#475569' }}>
+                      {t('maritime_freight.maritime_matrix_tab.s31', "عملة التسعير:")} {bid.currency}
+                    </div>
+                  </div>
+
+                  {/* تفاصيل التكاليف وأيام السماح */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.78rem', color: '#334155' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{t('maritime_freight.maritime_matrix_tab.s32', "نولون بحري (OF):")}</span>
+                      <strong>${Number(bid.ocean_freight || 0).toLocaleString()}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{t('maritime_freight.maritime_matrix_tab.s33', "عوائد موانئ (THC):")}</span>
+                      <strong>${(Number(bid.thc_origin || 0) + Number(bid.thc_destination || 0)).toLocaleString()}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{t('maritime_freight.maritime_matrix_tab.s34', "فترة السماح (Free Days):")}</span>
+                      <strong style={{ color: bid.free_days >= 14 ? '#15803d' : '#b45309' }}>
+                        {bid.free_days} {t('maritime_freight.maritime_matrix_tab.s35', "يوم")}
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{t('maritime_freight.maritime_matrix_tab.s36', "مدة الإبحار (Transit):")}</span>
+                      <strong>{bid.transit_time_days ? `${bid.transit_time_days} يوم` : t('maritime_freight.maritime_matrix_tab.s37', "غير محدد")}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* زر اعتماد السعر وتطبيق الهامش */}
+                <button
+                  type="button"
+                  onClick={() => onApproveBid(currentRfq, bid)}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    background: isAwarded ? '#15803d' : '#170e5e',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    fontSize: '0.84rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {isAwarded ? t('maritime_freight.maritime_matrix_tab.s38', "تعديل عرض السعر") : t('maritime_freight.maritime_matrix_tab.s39', "اعتماد السعر وإصدار عرض للعميل ←")}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

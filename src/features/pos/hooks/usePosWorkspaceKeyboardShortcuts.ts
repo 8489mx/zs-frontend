@@ -1,0 +1,148 @@
+import { useEffect } from 'react';
+import { isInteractiveElement, isPosModalOpen } from '@/features/pos/lib/pos-keyboard-safety';
+
+interface PosWorkspaceKeyboardShortcutsParams {
+  pos: {
+    cart: unknown[];
+    selectedLineKey: string;
+    paymentType: 'cash' | 'credit';
+    canShowLastSaleActions: boolean;
+    heldDraftSummaries: Array<{ id: string }>;
+    selectAdjacentCartLine: (direction: 'next' | 'prev') => void;
+    changeSelectedQty: (delta: number) => void;
+    printReceiptNow: () => void;
+    holdDraft: () => void | Promise<void>;
+    reprintLastSale: () => void;
+    reprintLastSaleReceipt: () => void;
+    printA4Now: () => void;
+    canOpenCheckout: boolean;
+  };
+  focusBarcodeEntry: () => void;
+  onOpenNewProduct?: () => void;
+  onOpenQuickService?: () => void;
+  printCurrentDraft: () => void;
+  onRequestClearCart: () => void;
+  onRequestLineDelete: (lineKey: string) => void;
+  onRequestCheckout: () => void;
+  onOpenHeldDrafts: () => void;
+  onRecallHeldDraftByIndex: (index: number) => void;
+  onOpenReprintModal?: () => void;
+  onOpenPhoneOrder?: () => void;
+}
+
+export function usePosWorkspaceKeyboardShortcuts({
+  pos,
+  focusBarcodeEntry,
+  onOpenNewProduct,
+  onOpenQuickService,
+  printCurrentDraft,
+  onRequestClearCart,
+  onRequestLineDelete,
+  onRequestCheckout,
+  onOpenHeldDrafts,
+  onRecallHeldDraftByIndex,
+  onOpenReprintModal,
+  onOpenPhoneOrder,
+}: PosWorkspaceKeyboardShortcutsParams) {
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget = Boolean(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable));
+
+      if (event.key === 'F3') {
+        event.preventDefault();
+        onOpenHeldDrafts();
+        return;
+      }
+      if (event.key === 'F6') {
+        event.preventDefault();
+        focusBarcodeEntry();
+        return;
+      }
+      if (event.key === 'Escape') {
+        if (isPosModalOpen() || isInteractiveElement(target)) return;
+        if (pos.cart.length) {
+          event.preventDefault();
+          onRequestClearCart();
+        }
+        return;
+      }
+      if (isPosModalOpen()) return;
+      if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey && ['1', '2', '3'].includes(event.key)) {
+        const targetIndex = Number(event.key) - 1;
+        if (targetIndex >= 0 && targetIndex < pos.heldDraftSummaries.length) {
+          event.preventDefault();
+          onRecallHeldDraftByIndex(targetIndex);
+        }
+        return;
+      }
+      if (isTypingTarget && !['F2', 'F3', 'F4', 'F6', 'F7', 'F8', 'F9', 'F12'].includes(event.key)) return;
+      if (!isTypingTarget && pos.selectedLineKey) {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          pos.selectAdjacentCartLine('next');
+          return;
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          pos.selectAdjacentCartLine('prev');
+          return;
+        }
+        if (event.key === 'Delete') {
+          event.preventDefault();
+          onRequestLineDelete(pos.selectedLineKey);
+          return;
+        }
+        if (event.key === '+' || event.code === 'NumpadAdd' || event.key === '=') {
+          event.preventDefault();
+          pos.changeSelectedQty(1);
+          return;
+        }
+        if (event.key === '-' || event.code === 'NumpadSubtract') {
+          event.preventDefault();
+          pos.changeSelectedQty(-1);
+          return;
+        }
+      }
+      if ((event.ctrlKey || event.metaKey) && event.altKey && (event.key === 'n' || event.key === 'N' || event.key === 'ى')) {
+        event.preventDefault();
+        onOpenNewProduct?.();
+        return;
+      }
+      if (event.key === 'F2') {
+        event.preventDefault();
+        if (pos.canOpenCheckout) {
+          onRequestCheckout();
+        }
+        return;
+      } else if (event.key === 'F4') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          onOpenHeldDrafts();
+        } else {
+          void pos.holdDraft();
+        }
+      } else if (event.key === 'F7' || (event.altKey && (event.key === 'p' || event.key === 'P' || event.key === 'ح' || event.key === 'd' || event.key === 'D' || event.key === 'ي'))) {
+        event.preventDefault();
+        onOpenPhoneOrder?.();
+        return;
+      } else if (event.key === 'F8') {
+        event.preventDefault();
+        onOpenQuickService?.();
+      } else if (event.key === 'F9') {
+        if (event.altKey || event.ctrlKey || event.shiftKey || event.metaKey) return;
+        event.preventDefault();
+        if (onOpenReprintModal) {
+          onOpenReprintModal();
+        } else {
+          pos.reprintLastSale();
+        }
+      } else if (event.key === 'F12') {
+        event.preventDefault();
+        if (pos.canShowLastSaleActions) pos.printA4Now();
+      }
+    };
+    window.addEventListener('keydown', listener);
+    return () => window.removeEventListener('keydown', listener);
+  }, [focusBarcodeEntry, onOpenHeldDrafts, onOpenNewProduct, onOpenPhoneOrder, onOpenQuickService, onOpenReprintModal, onRecallHeldDraftByIndex, onRequestCheckout, onRequestClearCart, onRequestLineDelete, pos, printCurrentDraft]);
+}

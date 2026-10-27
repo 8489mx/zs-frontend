@@ -1,0 +1,104 @@
+import type { InventorySectionKey } from '@/features/inventory/pages/inventory.page-config';
+import type { StockCountSession, StockTransfer } from '@/types/domain';
+import { formatCurrency } from '@/lib/format';
+
+export function selectInventoryTransfer(transfers: StockTransfer[], selectedTransferId: string) {
+  return transfers.find((transfer) => String(transfer.id) === String(selectedTransferId)) || transfers[0] || null;
+}
+
+export function selectInventorySession(sessions: StockCountSession[], selectedSessionId: string) {
+  if (!selectedSessionId) return null;
+  return sessions.find((session) => String(session.id) === String(selectedSessionId)) || null;
+}
+
+export function getSelectedTransferTotals(selectedTransfer: StockTransfer | null) {
+  const items = selectedTransfer?.items || [];
+  return {
+    itemsCount: items.length,
+    totalQty: items.reduce((sum: number, item: { qty?: number }) => sum + Number(item.qty || 0), 0)
+  };
+}
+
+export function getSelectedSessionTotals(selectedSession: StockCountSession | null): {
+  itemsCount: number;
+  expectedQty: number;
+  countedQty: number;
+  varianceQty: number;
+} {
+  const items = selectedSession?.items || [];
+  return {
+    itemsCount: items.length,
+    expectedQty: items.reduce((sum: number, item: { expectedQty?: number }) => sum + Number(item.expectedQty || 0), 0),
+    countedQty: items.reduce((sum: number, item: { countedQty?: number | string }) => sum + Number(item.countedQty || 0), 0),
+    varianceQty: Number(items.reduce((sum: number, item: { varianceQty?: number }) => sum + Number(item.varianceQty || 0), 0).toFixed(3))
+  };
+}
+
+export function getInventorySectionDescription(currentSection: InventorySectionKey) {
+  if (currentSection === 'overview') return 'راقب حالة الأصناف، ثم نفذ التسويات أو التالف من نفس الصفحة بدون دوران.';
+  if (currentSection === 'transfers') return 'تابع التحويلات بين المخازن: أنشئ، راقب، ثم استلم أو ألغِ من نفس المسار.';
+  if (currentSection === 'counts') return 'أنشئ جلسات الجرد وراجع الفروقات واعتمد النشر من شاشة واحدة.';
+  if (currentSection === 'damaged') return 'راجع سجل التالف واطبع أو صدر السجلات التي تحتاج متابعة.';
+  return 'سجل واحد لكل حركات المخزون حتى تعرف ماذا تغير ومتى.';
+}
+
+export function buildInventorySectionSpotlightCards(params: {
+  currentSection: InventorySectionKey;
+  inventory: { total: number; outOfStock: unknown[]; lowStock: unknown[]; inventoryValue?: number | null };
+  pendingTransfers: number;
+  transferSummary: { totalItems: number };
+  selectedTransfer: StockTransfer | null;
+  stockCountSummary: { draft?: number; posted?: number; totalVariance?: number; totalItems: number };
+  damagedSummary: { totalItems: number; totalQty: number };
+  damagedRecordsLength: number;
+  stockMovementsLength: number;
+  inventoryValue?: number | null;
+}) {
+  const { currentSection, inventory, pendingTransfers, transferSummary, selectedTransfer, stockCountSummary, damagedSummary, damagedRecordsLength, stockMovementsLength, inventoryValue } = params;
+  if (currentSection === 'overview') {
+    const val = inventoryValue ?? inventory.inventoryValue;
+    return [
+      { key: 'total', label: 'إجمالي الأصناف', value: `${inventory.total} صنف` },
+      { key: 'out', label: 'نافد المخزون', value: `${inventory.outOfStock.length} صنف` },
+      { key: 'low', label: 'منخفض المخزون', value: `${inventory.lowStock.length} صنف` },
+      { key: 'value', label: 'قيمة المخزون', value: val !== null && val !== undefined ? formatCurrency(val) : 'بحسب الصلاحية' },
+    ];
+  }
+  if (currentSection === 'transfers') {
+    return [
+      { key: 'pending', label: 'تحويلات بانتظار الاستلام', value: `${pendingTransfers}` },
+      { key: 'all', label: 'إجمالي التحويلات المطابقة', value: `${transferSummary.totalItems}` },
+      { key: 'selected', label: 'التحويل المحدد', value: selectedTransfer ? (selectedTransfer.docNo || selectedTransfer.id) : 'لا يوجد' },
+      { key: 'action', label: 'الأولوية الآن', value: pendingTransfers ? `${pendingTransfers} بحاجة استلام` : 'لا توجد معلقة' },
+    ];
+  }
+  if (currentSection === 'counts') {
+    const rawVariance = Number(stockCountSummary.totalVariance || 0);
+    const varianceDisplay = rawVariance === 0
+      ? '0 قطعة'
+      : rawVariance < 0
+      ? `عجز: ${Math.abs(rawVariance).toLocaleString('ar-EG')} قطعة`
+      : `فائض: ${rawVariance.toLocaleString('ar-EG')} قطعة`;
+
+    return [
+      { key: 'total', label: 'إجمالي الجلسات', value: `${(stockCountSummary.totalItems || 0).toLocaleString('ar-EG')} جلسة` },
+      { key: 'draft', label: 'جلسات مسودة', value: `${(stockCountSummary.draft || 0).toLocaleString('ar-EG')} مسودة` },
+      { key: 'posted', label: 'جلسات معتمدة', value: `${(stockCountSummary.posted || 0).toLocaleString('ar-EG')} معتمدة` },
+      { key: 'variance', label: 'إجمالي الفروقات', value: varianceDisplay },
+    ];
+  }
+  if (currentSection === 'damaged') {
+    return [
+      { key: 'records', label: 'سجلات التالف', value: `${damagedSummary.totalItems}` },
+      { key: 'qty', label: 'إجمالي الكمية التالفة', value: `${damagedSummary.totalQty}` },
+      { key: 'page', label: 'المعروض الآن', value: `${damagedRecordsLength}` },
+      { key: 'action', label: 'الأولوية الآن', value: damagedSummary.totalItems ? 'مراجعة التالف' : 'لا توجد سجلات' },
+    ];
+  }
+  return [
+    { key: 'moves', label: 'حركات المخزون', value: `${stockMovementsLength}` },
+    { key: 'draft', label: 'جلسات الجرد', value: `${stockCountSummary.totalItems}` },
+    { key: 'transfers', label: 'التحويلات', value: `${transferSummary.totalItems}` },
+    { key: 'action', label: 'الأولوية الآن', value: stockMovementsLength ? 'سجل الحركات متاح' : 'لا توجد حركات' },
+  ];
+}

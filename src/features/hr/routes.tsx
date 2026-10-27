@@ -1,0 +1,60 @@
+import { createLazyRoute } from '@/app/router/lazy-route';
+import type { FeatureRouteModule } from '@/app/router/types';
+import { FeatureGate } from '@/shared/components/feature-gate';
+
+function withHrGate<P = any>(Component: React.ComponentType<P>): React.ComponentType<any> {
+  return function HrGated(props: any) {
+    return (
+      <FeatureGate feature="hr" featureName="الموارد البشرية وشؤون الموظفين">
+        <Component {...props} />
+      </FeatureGate>
+    );
+  };
+}
+
+
+export const hrRouteModule: FeatureRouteModule = {
+  routes: [
+    { path: 'hr', element: createLazyRoute(() => import('@/features/hr/pages/HrOverviewPage').then((module) => ({ default: withHrGate(module.HrOverviewPage) }))) },
+    { path: 'hr/employees', element: createLazyRoute(() => import('@/features/hr/pages/EmployeesPage').then((module) => ({ default: withHrGate(module.EmployeesPage) }))) },
+    { path: 'hr/employees/new', element: createLazyRoute(() => import('@/features/hr/pages/EmployeeCreatePage').then((module) => ({ default: withHrGate(module.EmployeeCreatePage) }))) },
+    { path: 'hr/employees/:id/edit', element: createLazyRoute(() => import('@/features/hr/pages/EmployeeEditPage').then((module) => ({ default: withHrGate(module.EmployeeEditPage) }))) },
+    { path: 'hr/employees/:id', element: createLazyRoute(() => import('@/features/hr/pages/EmployeeProfilePage').then((module) => ({ default: withHrGate(module.EmployeeProfilePage) }))) },
+    { path: 'hr/employees/:id/print-contract', element: createLazyRoute(() => import('@/features/hr/pages/EmployeeContractPrintPage').then((module) => ({ default: withHrGate(module.EmployeeContractPrintPage) }))) },
+    { path: 'hr/settings', element: createLazyRoute(() => import('@/features/hr/pages/HrSettingsPage').then((module) => ({ default: withHrGate(module.HrSettingsPage) }))) },
+    { path: 'hr/documents', element: createLazyRoute(() => import('@/features/hr/pages/HrDocumentsPage').then((module) => ({ default: withHrGate(module.HrDocumentsPage) }))) },
+    { path: 'hr/loans', element: createLazyRoute(() => import('@/features/hr/pages/HrLoansPage').then((module) => ({ default: withHrGate(module.HrLoansPage) }))) },
+    { path: 'hr/payroll', element: createLazyRoute(() => import('@/features/hr/pages/HrPayrollPage').then((module) => ({ default: withHrGate(module.HrPayrollPage) }))) },
+    { path: 'hr/attendance', element: createLazyRoute(() => import('@/features/hr/pages/HrAttendancePage').then((module) => ({ default: withHrGate(module.HrAttendancePage) }))) },
+    { path: 'hr/leaves', element: createLazyRoute(() => import('@/features/hr/pages/HrLeavesPage').then((module) => ({ default: withHrGate(module.HrLeavesPage) }))) },
+    { path: 'hr/assets', element: createLazyRoute(() => import('@/features/hr/pages/HrAssetsPage').then((module) => ({ default: withHrGate(module.HrAssetsPage) }))) },
+    { path: 'hr/recruitment', element: createLazyRoute(() => import('@/features/hr/pages/RecruitmentKanbanPage').then((module) => ({ default: withHrGate(module.RecruitmentKanbanPage) }))) },
+    { path: 'hr/settlements', element: createLazyRoute(() => import('@/features/hr/pages/HrEndOfServicePage').then((module) => ({ default: withHrGate(module.HrEndOfServicePage) }))) },
+    { path: 'hr/reports', element: createLazyRoute(() => import('@/features/hr/pages/HrReportsPage').then((module) => ({ default: withHrGate(module.HrReportsPage) }))) },
+    { path: 'hr/mobile-punch', element: createLazyRoute(() => import('@/features/hr/pages/MobilePunchPage')) },
+    { path: 'mobile/punch', element: createLazyRoute(() => import('@/features/hr/pages/MobilePunchPage')) },
+  ],
+  navigation: [
+    {
+      key: 'hr',
+      label: 'الموارد البشرية',
+      to: '/hr',
+      end: true,
+      activePaths: [
+        '/hr',
+        '/hr/employees',
+        '/hr/employees/new',
+        '/hr/payroll',
+        '/hr/attendance',
+        '/hr/leaves',
+        '/hr/loans',
+        '/hr/documents',
+        '/hr/assets',
+        '/hr/reports',
+        '/hr/settings',
+      ],
+    },
+    { key: 'hr-recruitment', label: 'التوظيف وتتبع المتقدمين (ATS)', to: '/hr/recruitment', end: true },
+    { key: 'hr-settlements', label: 'مخالصات ونهاية الخدمة', to: '/hr/settlements', end: true },
+  ],
+};

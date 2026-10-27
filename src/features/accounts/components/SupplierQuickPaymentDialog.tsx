@@ -1,0 +1,675 @@
+import { useTranslation } from 'react-i18next';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/app/query-keys';
+import { Button } from '@/shared/ui/button';
+import { Field } from '@/shared/ui/field';
+import { accountsApi } from '@/features/accounts/api/accounts.api';
+import { formatCurrency } from '@/lib/format';
+import { SupplierBalanceScheduleCard } from '@/features/accounts/components/SupplierBalanceScheduleCard';
+import { CustomerBalanceInvoicesCard } from '@/features/accounts/components/CustomerBalanceInvoicesCard';
+import type { Customer, Supplier } from '@/types/domain';
+import { XIcon, ClockIcon } from '@/shared/components/icons/AppIcons';
+import { DialogShell } from '@/shared/components/dialog-shell';
+
+function BuildingOfficeIcon({ size = 16, style }: { size?: number; style?: React.CSSProperties }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+      <path d="M9 22v-4h6v4" />
+      <path d="M8 6h.01" />
+      <path d="M16 6h.01" />
+      <path d="M12 6h.01" />
+      <path d="M12 10h.01" />
+      <path d="M12 14h.01" />
+      <path d="M16 10h.01" />
+      <path d="M16 14h.01" />
+      <path d="M8 10h.01" />
+      <path d="M8 14h.01" />
+    </svg>
+  );
+}
+
+function UsersIcon({ size = 16, style }: { size?: number; style?: React.CSSProperties }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function MagnifyingGlassIcon({ size = 16, style }: { size?: number; style?: React.CSSProperties }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
+function PhoneIcon({ size = 13, style }: { size?: number; style?: React.CSSProperties }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
+}
+
+type QuickPartyTab = 'suppliers' | 'customers';
+
+export function SupplierQuickPaymentDialog() {
+  const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<QuickPartyTab>('suppliers');
+  
+  // Supplier state
+  const [selectedSupplierId, setSelectedSupplierId] = useState('');
+  const [supplierSearchText, setSupplierSearchText] = useState('');
+  const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
+  const [supplierFocusedIndex, setSupplierFocusedIndex] = useState(-1);
+
+  // Customer state
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customerSearchText, setCustomerSearchText] = useState('');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const [customerFocusedIndex, setCustomerFocusedIndex] = useState(-1);
+
+  const suppliersQuery = useQuery({
+    queryKey: [...queryKeys.suppliers, 'quick-payment-lookup'],
+    queryFn: () => accountsApi.suppliers(),
+    enabled: isOpen && activeTab === 'suppliers',
+  });
+
+  const customersQuery = useQuery({
+    queryKey: [...queryKeys.customers, 'quick-payment-lookup'],
+    queryFn: () => accountsApi.customers(),
+    enabled: isOpen && activeTab === 'customers',
+  });
+
+  const suppliers = useMemo(() => suppliersQuery.data || [], [suppliersQuery.data]);
+  const customers = useMemo(() => customersQuery.data || [], [customersQuery.data]);
+
+  const selectedSupplier = useMemo(() => suppliers.find((supplier) => String(supplier.id) === selectedSupplierId) || null, [suppliers, selectedSupplierId]);
+  const selectedCustomer = useMemo(() => customers.find((customer) => String(customer.id) === selectedCustomerId) || null, [customers, selectedCustomerId]);
+
+  const filteredSuppliers = useMemo(() => {
+    const query = supplierSearchText.trim().toLowerCase();
+    if (!query) return suppliers;
+    if (selectedSupplier && query === String(selectedSupplier.name || '').trim().toLowerCase()) {
+      return suppliers;
+    }
+    const cleanDigits = query.replace(/\D/g, '');
+    return suppliers.filter((s: Supplier) => {
+      const matchName = String(s.name || '').toLowerCase().includes(query);
+      const matchPhone = cleanDigits && String(s.phone || '').replace(/\D/g, '').includes(cleanDigits);
+      return matchName || matchPhone;
+    });
+  }, [suppliers, supplierSearchText, selectedSupplier]);
+
+  const filteredCustomers = useMemo(() => {
+    const query = customerSearchText.trim().toLowerCase();
+    if (!query) return customers;
+    if (selectedCustomer && query === String(selectedCustomer.name || '').trim().toLowerCase()) {
+      return customers;
+    }
+    const cleanDigits = query.replace(/\D/g, '');
+    return customers.filter((c: Customer) => {
+      const matchName = String(c.name || '').toLowerCase().includes(query);
+      const matchPhone = cleanDigits && String(c.phone || '').replace(/\D/g, '').includes(cleanDigits);
+      return matchName || matchPhone;
+    });
+  }, [customers, customerSearchText, selectedCustomer]);
+
+  const topSuppliers = useMemo(() => {
+    return [...suppliers]
+      .filter((s: Supplier) => Number(s.balance || 0) > 0)
+      .sort((a: Supplier, b: Supplier) => Number(b.balance || 0) - Number(a.balance || 0))
+      .slice(0, 5);
+  }, [suppliers]);
+
+  const topCustomers = useMemo(() => {
+    return [...customers]
+      .filter((c: Customer) => Number(c.balance || 0) > 0)
+      .sort((a: Customer, b: Customer) => Number(b.balance || 0) - Number(a.balance || 0))
+      .slice(0, 5);
+  }, [customers]);
+
+  function handleSelectSupplier(s: Supplier) {
+    setSelectedSupplierId(String(s.id));
+    setSupplierSearchText(s.name || '');
+    setIsSupplierDropdownOpen(false);
+    setSupplierFocusedIndex(-1);
+  }
+
+  function handleClearSupplier() {
+    setSelectedSupplierId('');
+    setSupplierSearchText('');
+    setIsSupplierDropdownOpen(false);
+    setSupplierFocusedIndex(-1);
+  }
+
+  function handleSelectCustomer(c: Customer) {
+    setSelectedCustomerId(String(c.id));
+    setCustomerSearchText(c.name || '');
+    setIsCustomerDropdownOpen(false);
+    setCustomerFocusedIndex(-1);
+  }
+
+  function handleClearCustomer() {
+    setSelectedCustomerId('');
+    setCustomerSearchText('');
+    setIsCustomerDropdownOpen(false);
+    setCustomerFocusedIndex(-1);
+  }
+
+  function closeDialog() {
+    setIsOpen(false);
+    handleClearSupplier();
+    handleClearCustomer();
+  }
+
+  useEffect(() => {
+    if (selectedSupplier) {
+      setSupplierSearchText(selectedSupplier.name || '');
+    }
+  }, [selectedSupplier]);
+
+  useEffect(() => {
+    if (selectedCustomer) {
+      setCustomerSearchText(selectedCustomer.name || '');
+    }
+  }, [selectedCustomer]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (isOpen && (event.key === 'Escape' || event.key === 'Esc')) {
+        if (isSupplierDropdownOpen) {
+          event.preventDefault();
+          setIsSupplierDropdownOpen(false);
+          return;
+        }
+        if (isCustomerDropdownOpen) {
+          event.preventDefault();
+          setIsCustomerDropdownOpen(false);
+          return;
+        }
+        const hasInnerModal = document.querySelector('.supplier-payment-dialog-overlay .dialog-overlay');
+        if (hasInnerModal) {
+          return;
+        }
+        event.preventDefault();
+        closeDialog();
+        return;
+      }
+
+      const key = String(event.key || '').toLowerCase();
+      const isSupplierShortcut = event.ctrlKey
+        && event.altKey
+        && (event.code === 'KeyD' || key === 'd' || event.key === 'د');
+
+      const isCustomerShortcut = event.ctrlKey
+        && event.altKey
+        && (event.code === 'KeyC' || key === 'c' || event.key === 'ؤ');
+
+      if (isSupplierShortcut) {
+        event.preventDefault();
+        if (!isOpen) {
+          setActiveTab('suppliers');
+          setIsOpen(true);
+        } else if (activeTab !== 'suppliers') {
+          setActiveTab('suppliers');
+        } else {
+          closeDialog();
+        }
+      } else if (isCustomerShortcut) {
+        event.preventDefault();
+        if (!isOpen) {
+          setActiveTab('customers');
+          setIsOpen(true);
+        } else if (activeTab !== 'customers') {
+          setActiveTab('customers');
+        } else {
+          closeDialog();
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, activeTab, isSupplierDropdownOpen, isCustomerDropdownOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (activeTab === 'suppliers' && !selectedSupplierId && suppliers.length === 1) {
+      handleSelectSupplier(suppliers[0]);
+    }
+    if (activeTab === 'customers' && !selectedCustomerId && customers.length === 1) {
+      handleSelectCustomer(customers[0]);
+    }
+  }, [isOpen, activeTab, selectedSupplierId, selectedCustomerId, suppliers, customers]);
+
+  if (!isOpen) return null;
+
+  return (
+    <DialogShell
+      open={isOpen}
+      onClose={closeDialog}
+      width="min(1060px, calc(100vw - 32px))"
+      maxHeight="min(92vh, 860px)"
+      shellClassName="supplier-quick-payment-shell"
+      ariaLabel={t('accounts.supplier_quick_payment_dialog.s0', "التحصيل والدفع السريع")}
+    >
+      <div className="supplier-quick-payment-content" style={{ padding: '22px 24px' }}>
+          <div className="quick-payment-dialog-header">
+            <div className="quick-payment-header-content">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{ width: '3px', height: '16px', backgroundColor: '#170e5e', borderRadius: '2px', display: 'inline-block' }} />
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>{t('accounts.supplier_quick_payment_dialog.s1', "نافذة التحصيل والدفع السريع")}</h3>
+              </div>
+              <p className="muted">
+                {activeTab === 'suppliers'
+                  ? t('accounts.supplier_quick_payment_dialog.s2', "سداد وجدولة مستحقات الموردين ومتابعة كشف الحساب الفوري.")
+                  : t('accounts.supplier_quick_payment_dialog.s3', "استقبال وتحصيل مديونيات العملاء مع إرسال إيصال السداد.")}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="supplier-payment-dialog-close"
+              onClick={closeDialog}
+              aria-label={t('accounts.supplier_quick_payment_dialog.s4', "إغلاق النافذة")}
+            >
+              <XIcon size={16} />
+            </button>
+          </div>
+
+          <div className="quick-party-tabs-segment" role="tablist" aria-label={t('accounts.supplier_quick_payment_dialog.s5', "نوع الطرف")}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'suppliers'}
+              className={`quick-party-tab ${activeTab === 'suppliers' ? 'quick-party-tab--suppliers-active' : ''}`}
+              onClick={() => setActiveTab('suppliers')}
+            >
+              <span className="quick-party-tab-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <BuildingOfficeIcon size={18} />
+              </span>
+              <span className="quick-party-tab-title">{t('accounts.supplier_quick_payment_dialog.s6', "الموردون (سداد وجدولة)")}</span>
+              <span className="quick-party-tab-kbd">Ctrl+Alt+D</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'customers'}
+              className={`quick-party-tab ${activeTab === 'customers' ? 'quick-party-tab--customers-active' : ''}`}
+              onClick={() => setActiveTab('customers')}
+            >
+              <span className="quick-party-tab-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <UsersIcon size={18} />
+              </span>
+              <span className="quick-party-tab-title">{t('accounts.supplier_quick_payment_dialog.s7', "العملاء (استقبال وتحصيل)")}</span>
+              <span className="quick-party-tab-kbd">Ctrl+Alt+C</span>
+            </button>
+          </div>
+
+          {activeTab === 'suppliers' ? (
+            <div>
+              <div className="quick-selector-card">
+                <div className="supplier-quick-payment-grid">
+                  <Field label={t('accounts.supplier_quick_payment_dialog.s8', "ابحث عن المورد (بالاسم أو برقم الهاتف)")}>
+                    <div className="quick-searchable-combobox">
+                      <div className="quick-searchable-input-wrapper">
+                        <span className="quick-searchable-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                          <MagnifyingGlassIcon size={16} />
+                        </span>
+                        <input
+                          type="text"
+                          className="quick-searchable-input"
+                          value={supplierSearchText}
+                          onChange={(e) => {
+                            setSupplierSearchText(e.target.value);
+                            setIsSupplierDropdownOpen(true);
+                            setSupplierFocusedIndex(-1);
+                            if (selectedSupplierId && e.target.value !== selectedSupplier?.name) {
+                              setSelectedSupplierId('');
+                            }
+                          }}
+                          onFocus={(e) => {
+                            e.target.select();
+                            setIsSupplierDropdownOpen(true);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowDown') {
+                              e.preventDefault();
+                              setIsSupplierDropdownOpen(true);
+                              setSupplierFocusedIndex((prev) => (prev < filteredSuppliers.length - 1 ? prev + 1 : 0));
+                            } else if (e.key === 'ArrowUp') {
+                              e.preventDefault();
+                              setIsSupplierDropdownOpen(true);
+                              setSupplierFocusedIndex((prev) => (prev > 0 ? prev - 1 : filteredSuppliers.length - 1));
+                            } else if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (isSupplierDropdownOpen && supplierFocusedIndex >= 0 && filteredSuppliers[supplierFocusedIndex]) {
+                                handleSelectSupplier(filteredSuppliers[supplierFocusedIndex]);
+                              } else if (filteredSuppliers.length === 1) {
+                                handleSelectSupplier(filteredSuppliers[0]);
+                              }
+                            } else if (e.key === 'Escape') {
+                              setIsSupplierDropdownOpen(false);
+                            }
+                          }}
+                          placeholder={t('accounts.supplier_quick_payment_dialog.s9', "اكتب اسم المورد أو رقم الهاتف للبحث السريع...")}
+                        />
+                        {supplierSearchText || selectedSupplierId ? (
+                          <button
+                            type="button"
+                            className="quick-searchable-clear"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleClearSupplier();
+                            }}
+                            title={t('accounts.supplier_quick_payment_dialog.s10', "إلغاء اختيار المورد ومسح البحث")}
+                            aria-label={t('accounts.supplier_quick_payment_dialog.s11', "مسح البحث")}
+                          >
+                            <XIcon size={12} />
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {isSupplierDropdownOpen ? (
+                        <div className="quick-searchable-dropdown">
+                          {filteredSuppliers.length > 0 ? (
+                            filteredSuppliers.map((supplier: Supplier, index: number) => (
+                              <button
+                                key={supplier.id}
+                                type="button"
+                                className={`quick-searchable-item ${index === supplierFocusedIndex ? 'quick-searchable-item--active' : ''} ${String(supplier.id) === selectedSupplierId ? 'quick-searchable-item--selected' : ''}`}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleSelectSupplier(supplier);
+                                }}
+                                onClick={() => handleSelectSupplier(supplier)}
+                              >
+                                <div className="quick-searchable-item-info">
+                                  <span className="quick-searchable-item-name">{supplier.name}</span>
+                                  {supplier.phone ? (
+                                    <span className="quick-searchable-item-phone" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      <PhoneIcon size={12} /> {supplier.phone}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <span className="quick-searchable-item-balance">
+                                  {formatCurrency(Number(supplier.balance || 0))}
+                                </span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="quick-searchable-empty">
+                              {t('accounts.supplier_quick_payment_dialog.s12', "لا يوجد مورد مطابق لـ \"")}{supplierSearchText}"
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  </Field>
+                  {selectedSupplier ? (
+                    <div className="supplier-quick-payment-summary" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <span>{t('accounts.supplier_quick_payment_dialog.s13', "رصيد المورد الحالي (")}{selectedSupplier.name})</span>
+                        <strong>{formatCurrency(Number(selectedSupplier.balance || 0))}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearSupplier}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          color: '#dc2626',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <XIcon size={12} />
+                        <span>{t('accounts.supplier_quick_payment_dialog.s14', "ترك المورد")}</span>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {topSuppliers.length > 0 ? (
+                  <div className="quick-debtors-preview">
+                    <span className="quick-debtors-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <ClockIcon size={14} style={{ color: '#d97706' }} /> {t('accounts.supplier_quick_payment_dialog.s15', "اختيار سريع للموردين الأكثر مديونية:")}
+                    </span>
+                    <div className="quick-debtors-chips">
+                      {topSuppliers.map((s: Supplier) => {
+                        const isSelected = selectedSupplierId === String(s.id);
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            className={`quick-debtor-chip ${isSelected ? 'quick-debtor-chip--active' : ''}`}
+                            onClick={() => handleSelectSupplier(s)}
+                          >
+                            <strong>{s.name}</strong>
+                            <span>{formatCurrency(Number(s.balance || 0))}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {selectedSupplier ? (
+                <div className="supplier-quick-payment-embedded-card">
+                  <SupplierBalanceScheduleCard supplier={selectedSupplier} />
+                </div>
+              ) : (
+                <div className="quick-empty-guide">
+                  <div className="quick-empty-icon" style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(23, 12, 92, 0.08)', color: 'var(--primary, #170c5c)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                    <BuildingOfficeIcon size={28} />
+                  </div>
+                  <div className="quick-empty-title">{t('accounts.supplier_quick_payment_dialog.s16', "اختر مورداً لبدء المتابعة")}</div>
+                  <div className="quick-empty-hint">
+                    {t('accounts.supplier_quick_payment_dialog.s17', "يمكنك كتابة اسم المورد أو رقم هاتفه في مربع البحث بالأعلى، أو الضغط على أحد أزرار الاختيار السريع لعرض تفاصيل الجدولة وتسديد الأقساط.")}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="quick-selector-card">
+                <div className="supplier-quick-payment-grid">
+                  <Field label={t('accounts.supplier_quick_payment_dialog.s18', "ابحث عن العميل (بالاسم أو برقم الهاتف)")}>
+                    <div className="quick-searchable-combobox">
+                      <div className="quick-searchable-input-wrapper">
+                        <span className="quick-searchable-icon" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                          <MagnifyingGlassIcon size={16} />
+                        </span>
+                        <input
+                          type="text"
+                          className="quick-searchable-input"
+                          value={customerSearchText}
+                          onChange={(e) => {
+                            setCustomerSearchText(e.target.value);
+                            setIsCustomerDropdownOpen(true);
+                            setCustomerFocusedIndex(-1);
+                            if (selectedCustomerId && e.target.value !== selectedCustomer?.name) {
+                              setSelectedCustomerId('');
+                            }
+                          }}
+                          onFocus={(e) => {
+                            e.target.select();
+                            setIsCustomerDropdownOpen(true);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowDown') {
+                              e.preventDefault();
+                              setIsCustomerDropdownOpen(true);
+                              setCustomerFocusedIndex((prev) => (prev < filteredCustomers.length - 1 ? prev + 1 : 0));
+                            } else if (e.key === 'ArrowUp') {
+                              e.preventDefault();
+                              setIsCustomerDropdownOpen(true);
+                              setCustomerFocusedIndex((prev) => (prev > 0 ? prev - 1 : filteredCustomers.length - 1));
+                            } else if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (isCustomerDropdownOpen && customerFocusedIndex >= 0 && filteredCustomers[customerFocusedIndex]) {
+                                handleSelectCustomer(filteredCustomers[customerFocusedIndex]);
+                              } else if (filteredCustomers.length === 1) {
+                                handleSelectCustomer(filteredCustomers[0]);
+                              }
+                            } else if (e.key === 'Escape') {
+                              setIsCustomerDropdownOpen(false);
+                            }
+                          }}
+                          placeholder={t('accounts.supplier_quick_payment_dialog.s19', "اكتب اسم العميل أو رقم الهاتف للبحث السريع...")}
+                          disabled={false}
+                        />
+                        {customerSearchText || selectedCustomerId ? (
+                          <button
+                            type="button"
+                            className="quick-searchable-clear"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleClearCustomer();
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleClearCustomer();
+                            }}
+                            title={t('accounts.supplier_quick_payment_dialog.s20', "إلغاء اختيار العميل ومسح البحث")}
+                            aria-label={t('accounts.supplier_quick_payment_dialog.s21', "مسح البحث")}
+                          >
+                            <XIcon size={12} />
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {isCustomerDropdownOpen ? (
+                        <div className="quick-searchable-dropdown">
+                          {filteredCustomers.length > 0 ? (
+                            filteredCustomers.map((customer: Customer, index: number) => (
+                              <button
+                                key={customer.id}
+                                type="button"
+                                className={`quick-searchable-item ${index === customerFocusedIndex ? 'quick-searchable-item--active' : ''} ${String(customer.id) === selectedCustomerId ? 'quick-searchable-item--selected' : ''}`}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleSelectCustomer(customer);
+                                }}
+                                onClick={() => handleSelectCustomer(customer)}
+                              >
+                                <div className="quick-searchable-item-info">
+                                  <span className="quick-searchable-item-name">{customer.name}</span>
+                                  {customer.phone ? (
+                                    <span className="quick-searchable-item-phone" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                      <PhoneIcon size={12} /> {customer.phone}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <span className="quick-searchable-item-balance quick-searchable-item-balance--customer">
+                                  {formatCurrency(Number(customer.balance || 0))}
+                                </span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="quick-searchable-empty">
+                              {t('accounts.supplier_quick_payment_dialog.s22', "لا يوجد عميل مطابق لـ \"")}{customerSearchText}"
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  </Field>
+                  {selectedCustomer ? (
+                    <div className="supplier-quick-payment-summary" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div>
+                        <span>{t('accounts.supplier_quick_payment_dialog.s23', "رصيد العميل المستحق (")}{selectedCustomer.name})</span>
+                        <strong>{formatCurrency(Number(selectedCustomer.balance || 0))}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearCustomer}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          color: '#dc2626',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <XIcon size={12} />
+                        <span>{t('accounts.supplier_quick_payment_dialog.s24', "ترك العميل")}</span>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {topCustomers.length > 0 ? (
+                  <div className="quick-debtors-preview">
+                    <span className="quick-debtors-label" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <ClockIcon size={14} style={{ color: '#d97706' }} /> {t('accounts.supplier_quick_payment_dialog.s25', "اختيار سريع للعملاء الأكثر مديونية:")}
+                    </span>
+                    <div className="quick-debtors-chips">
+                      {topCustomers.map((c: Customer) => {
+                        const isSelected = selectedCustomerId === String(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className={`quick-debtor-chip quick-debtor-chip--customer ${isSelected ? 'quick-debtor-chip--customer-active' : ''}`}
+                            onClick={() => handleSelectCustomer(c)}
+                          >
+                            <strong>{c.name}</strong>
+                            <span>{formatCurrency(Number(c.balance || 0))}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {selectedCustomer ? (
+                <div className="supplier-quick-payment-embedded-card">
+                  <CustomerBalanceInvoicesCard customer={selectedCustomer} />
+                </div>
+              ) : (
+                <div className="quick-empty-guide">
+                  <div className="quick-empty-icon" style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(23, 12, 92, 0.08)', color: 'var(--primary, #170c5c)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                    <UsersIcon size={28} />
+                  </div>
+                  <div className="quick-empty-title">{t('accounts.supplier_quick_payment_dialog.s26', "اختر عميلاً لعرض فواتيره وتسجيل التحصيل")}</div>
+                  <div className="quick-empty-hint">
+                    {t('accounts.supplier_quick_payment_dialog.s27', "يمكنك اختيار العميل من القائمة بالأعلى أو الضغط على أحد أزرار الاختيار السريع لعرض كشف حسابه وفواتيره السابقة وتفاصيل الأصناف وسداد المديونية.")}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="actions compact-actions supplier-payment-dialog-actions" style={{ justifyContent: 'flex-end', marginTop: 20 }}>
+            <Button type="button" variant="secondary" onClick={closeDialog}>{t('accounts.supplier_quick_payment_dialog.s28', "إغلاق النافذة")}</Button>
+          </div>
+        </div>
+    </DialogShell>
+  );
+}

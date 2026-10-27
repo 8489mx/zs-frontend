@@ -1,0 +1,45 @@
+import type { HrDocument, HrEmployeeAsset } from '@/types/domain';
+import { documentStatusLabel, normalizeText } from '@/features/hr/utils/employee-profile.helpers';
+
+export interface DocumentDraft {
+  title: string;
+  documentType: string;
+  expiryDate: string;
+  notes: string;
+  fileUrl?: string;
+}
+
+export type ProfileSection = 'overview' | 'attendance' | 'payroll' | 'loans' | 'leaves' | 'assets' | 'documents' | 'details' | 'ledger' | 'all';
+
+export const initialDocumentDraft: DocumentDraft = {
+  title: '',
+  documentType: '',
+  expiryDate: '',
+  notes: '',
+};
+
+export const PROFILE_SECTIONS: { key: ProfileSection; label: string }[] = [
+  { key: 'overview', label: 'نظرة عامة' },
+  { key: 'attendance', label: 'الحضور والانصراف' },
+  { key: 'payroll', label: 'المرتبات والبدلات' },
+  { key: 'loans', label: 'السلف والمديونيات' },
+  { key: 'leaves', label: 'الإجازات والأذونات' },
+  { key: 'assets', label: 'العُهد والأصول' },
+  { key: 'documents', label: 'المستندات' },
+  { key: 'details', label: 'العقد والبيانات' },
+  { key: 'ledger', label: 'السجل المالي' },
+];
+
+export function shouldShowProfileSection(activeSection: ProfileSection, section: ProfileSection) {
+  return activeSection === 'all' || activeSection === section;
+}
+
+export function isDocumentExpired(row: HrDocument) {
+  const status = documentStatusLabel(row.expiryDate);
+  return status === 'منتهي' || status === 'قريب الانتهاء';
+}
+
+export function isAssetOpen(row: HrEmployeeAsset) {
+  const status = normalizeText(row.status);
+  return status === 'assigned' || status === 'damaged' || status === 'lost';
+}

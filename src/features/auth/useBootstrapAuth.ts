@@ -1,0 +1,122 @@
+import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { DEFAULT_STORE_NAME, DEFAULT_THEME } from '@/config/app-defaults';
+import { ApiError, ensureAuthStateVersion } from '@/lib/http';
+import { clearQueryClientData } from '@/lib/query-client-session';
+import { authApi } from '@/shared/api/auth';
+import { activationApi } from '@/shared/api/activation';
+import { useAuthStore, getStoredOfflineSession } from '@/stores/auth-store';
+
+export function useBootstrapAuth() {
+  const hasRun = useRef(false);
+  const queryClient = useQueryClient();
+  const setSession = useAuthStore((state) => state.setSession);
+  const clearSession = useAuthStore((state) => state.clearSession);
+  const setAppGate = useAuthStore((state) => state.setAppGate);
+
+  useEffect(() => {
+    if (hasRun.current) return;
+    hasRun.current = true;
+    ensureAuthStateVersion();
+
+    // FAST-PATH 1: Instant local session hydration (0ms delay)
+    // If an offline session exists, restore it immediately so the UI renders instantly without waiting for network timeouts.
+    const offlineSession = getStoredOfflineSession();
+    if (offlineSession) {
+      setSession(offlineSession);
+      setAppGate('ready');
+    }
+
+    const resetTo = async (gate: 'activation' | 'setup' | 'login', status?: Awaited<ReturnType<typeof activationApi.status>>) => {
+      await clearQueryClientData(queryClient);
+      clearSession();
+      setAppGate(gate, status);
+    };
+
+    const checkAuth = async (retries = 3) => {
+      // FAST-PATH 2: If device is strictly offline and session exists, stay ready immediately without wasting time on network calls.
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (isOffline) {
+        if (offlineSession) {
+          return;
+        }
+      }
+
+      try {
+        const [statusResult, meResult] = await Promise.allSettled([activationApi.status(), authApi.me()]);
+
+        // If status failed, an explicit auth rejection must beat offline fallback.
+        // A successful status response still owns the activation/setup gates below:
+        // a new desktop install has no session until those gates are completed.
+        if (statusResult.status === 'rejected' && meResult.status === 'rejected' && meResult.reason instanceof ApiError
+          && [401, 403].includes(meResult.reason.status)) {
+          await resetTo('login');
+          return;
+        }
+
+        if (statusResult.status === 'rejected') {
+          // If device is offline or backend is unreachable, keep offline session ready
+          if (offlineSession) {
+            setSession(offlineSession);
+            setAppGate('ready');
+            return;
+          }
+
+          if (retries > 0 && navigator.onLine) {
+            console.log(`Backend not ready yet, retrying... (${retries} attempts left)`);
+            setTimeout(() => void checkAuth(retries - 1), 1500);
+            return;
+          }
+          console.error('activation_status_failed', statusResult.reason);
+          await resetTo('login');
+          return;
+        }
+
+        const status = statusResult.value;
+
+        if (status.activationRequired && !status.activated) {
+          await resetTo('activation', status);
+          return;
+        }
+
+        if (status.setupRequired) {
+          await resetTo('setup', status);
+          return;
+        }
+
+        if (meResult.status === 'fulfilled') {
+          const response = meResult.value;
+          const tenantId = String(response.user?.tenantId || response.tenant?.id || '').trim();
+          const accountId = String(response.user?.accountId || response.tenant?.accountId || '').trim();
+          setSession({
+            user: {
+              ...response.user,
+              tenantId: tenantId || response.user?.tenantId,
+              accountId: accountId || response.user?.accountId,
+              mustChangePassword: response.security?.mustChangePassword === true,
+              usingDefaultAdminPassword: response.security?.usingDefaultAdminPassword === true,
+            },
+            tenant: response.tenant ?? null,
+            storeName: response.settings?.storeName || DEFAULT_STORE_NAME,
+            theme: response.settings?.theme || DEFAULT_THEME,
+            language: response.settings?.uiLanguage === 'en' ? 'en' : 'ar',
+            isEtaActive: Boolean(response.settings?.isEtaActive),
+          });
+          setAppGate('ready', status);
+          return;
+        }
+
+        const error = meResult.reason;
+        if (!(error instanceof ApiError) || error.status !== 401) {
+          console.error('bootstrap_auth_failed', error);
+        }
+        await resetTo('login', status);
+      } catch (error) {
+        console.error('bootstrap_auth_failed', error);
+        await resetTo('login');
+      }
+    };
+
+    void checkAuth();
+  }, [clearSession, queryClient, setAppGate, setSession]);
+}

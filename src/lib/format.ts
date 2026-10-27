@@ -1,0 +1,112 @@
+import { getCurrencyDecimals, getCurrencySymbol, getGlobalSystemCurrency } from './currencies';
+
+export function formatCurrency(value: number | string | undefined | null, currencyCode?: string | null): string {
+  const code = currencyCode || getGlobalSystemCurrency();
+  const decimals = getCurrencyDecimals(code);
+  const num = Number(value || 0);
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  }).format(num);
+}
+
+export function formatCurrencyWithSymbol(value: number | string | undefined | null, currencyCode?: string | null): string {
+  const code = currencyCode || getGlobalSystemCurrency();
+  const symbol = getCurrencySymbol(code);
+  return `${formatCurrency(value, code)} ${symbol}`;
+}
+
+export function formatCurrencyWithCode(value: number | string | undefined | null, currencyCode?: string | null): string {
+  const code = currencyCode || getGlobalSystemCurrency();
+  return `${formatCurrency(value, code)} ${code}`;
+}
+
+export function formatWhatsAppNumber(phone: string) {
+  let cleaned = String(phone || '').replace(/\D/g, '');
+  if (cleaned.startsWith('00')) cleaned = cleaned.substring(2);
+  if (cleaned.length === 11 && cleaned.startsWith('01')) {
+    cleaned = '2' + cleaned;
+  }
+  if (cleaned.length === 10 && cleaned.startsWith('05')) {
+    cleaned = '966' + cleaned.slice(1);
+  }
+  if (cleaned.length === 8 && /^[2569]/.test(cleaned)) {
+    cleaned = '965' + cleaned;
+  }
+  return cleaned;
+}
+
+export function formatDate(value?: string | Date | number | null) {
+  if (!value) return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }).format(date);
+}
+
+export function toArabicDigits(str: string): string {
+  return String(str || '');
+}
+
+export function formatDateOnly(value?: string | Date) {
+  if (!value) return '—';
+  let year = '';
+  let month = '';
+  let day = '';
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      year = match[1];
+      month = match[2];
+      day = match[3];
+    }
+  }
+  if (!year) {
+    const date = typeof value === 'string' ? new Date(value) : value;
+    if (Number.isNaN(date.getTime())) return String(value);
+    day = String(date.getDate()).padStart(2, '0');
+    month = String(date.getMonth() + 1).padStart(2, '0');
+    year = String(date.getFullYear());
+  }
+  return `${year}/${month}/${day}`;
+}
+
+export function formatDateTimeArabic(date?: Date | string | null) {
+  if (!date) return '—';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return String(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const period = hours >= 12 ? 'م' : 'ص';
+  hours = hours % 12 || 12;
+  const formattedHours = String(hours).padStart(2, '0');
+  return `${day}/${month}/${year} - ${formattedHours}:${minutes} ${period}`;
+}
+
+function toIsoUtc(date: Date) {
+  return new Date(Date.UTC(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+    date.getMilliseconds()
+  )).toISOString();
+}
+
+export function dayRangeLast30(referenceDate?: Date) {
+  const end = referenceDate ? new Date(referenceDate) : new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 30);
+  return { from: toIsoUtc(start), to: toIsoUtc(end) };
+}

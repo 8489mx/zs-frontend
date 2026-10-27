@@ -1,0 +1,36 @@
+import { z } from 'zod';
+
+export const inventoryAdjustmentSchema = z.object({
+  productId: z.string().trim().min(1, 'اختر الصنف'),
+  actionType: z.enum(['adjust', 'add', 'deduct']),
+  qty: z.coerce.number().min(0, 'الكمية يجب أن تكون صفرًا أو أكبر'),
+  reason: z.string().trim().min(1, 'السبب مطلوب إدخاله'),
+  note: z.string().trim().optional().default(''),
+  branchId: z.string().trim().optional().default(''),
+  locationId: z.string().trim().optional().default(''),
+  managerPin: z.string().trim().optional()
+});
+
+export const damagedStockSchema = z.object({
+  productId: z.string().trim().min(1, 'اختر الصنف'),
+  qty: z.coerce.number().positive('الكمية يجب أن تكون أكبر من صفر'),
+  reason: z.string().trim().min(1, 'حدد السبب'),
+  note: z.string().trim().optional().default(''),
+  branchId: z.string().trim().optional().default(''),
+  locationId: z.string().trim().optional().default(''),
+  managerPin: z.string().trim().optional()
+}).refine(
+  (data) => {
+    const effective = (data.note || data.reason || '').trim();
+    return effective.length >= 8;
+  },
+  {
+    message: 'اكتب سبب أو تفاصيل التلف بوضوح في 8 أحرف على الأقل',
+    path: ['note'],
+  }
+);
+
+export type InventoryAdjustmentInput = z.input<typeof inventoryAdjustmentSchema>;
+export type InventoryAdjustmentOutput = z.output<typeof inventoryAdjustmentSchema>;
+export type DamagedStockInput = z.input<typeof damagedStockSchema>;
+export type DamagedStockOutput = z.output<typeof damagedStockSchema>;

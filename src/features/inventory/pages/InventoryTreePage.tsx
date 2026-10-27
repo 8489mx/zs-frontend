@@ -1,0 +1,500 @@
+import { useTranslation } from 'react-i18next';
+import { useState, useMemo, useCallback } from 'react';
+import { systemAlert } from '@/shared/components/system-alert';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/shared/components/page-header';
+import { WarehousesNavTabs } from '@/features/inventory/components/WarehousesNavTabs';
+import { StatsGrid } from '@/shared/components/stats-grid';
+import { Button } from '@/shared/ui/button';
+import { CustomSelect } from '@/shared/ui/custom-select';
+import { AlertTriangleIcon, SearchIcon } from '@/shared/components/icons/AppIcons';
+import { inventoryApi } from '@/features/inventory/api/inventory.api';
+import { catalogApi } from '@/shared/api/catalog';
+import type { ProductRow, SortMode } from '../components/inventory-tree/inventoryTree.types';
+import {
+  QuickAssignModal,
+  QuickTransferModal,
+  QuickConsolidateModal,
+  CategoryTransferModal,
+} from '../components/inventory-tree/InventoryTreeModals';
+import { BulkActionBar } from '../components/inventory-tree/BulkActionBar';
+import { CategorySection } from '../components/inventory-tree/CategorySection';
+
+const SORT_OPTIONS = [
+  { value: 'default', label: 'ترتيب افتراضي' },
+  { value: 'qtyDesc', label: 'الأعلى رصيداً أولاً' },
+  { value: 'qtyAsc', label: 'الأقل رصيداً أولاً' },
+];
+
+export function InventoryTreePage() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  // Filters
+  const [search, setSearch] = useState('');
+  const [filterLocationId, setFilterLocationId] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('default');
+  const [showOnlyWithStock, setShowOnlyWithStock] = useState(true);
+  const [showUnassigned, setShowUnassigned] = useState(false);
+
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Modal state
+  type ModalType = 'transfer' | 'assign' | 'categoryTransfer' | 'consolidate' | null;
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
+  const [modalProducts, setModalProducts] = useState<ProductRow[]>([]);
+  const [categoryTransferData, setCategoryTransferData] = useState<{ name: string; products: ProductRow[] } | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [collapsedDuringSearch, setCollapsedDuringSearch] = useState<Set<string>>(new Set());
+
+  // Queries
+  const productsQuery = useQuery({ queryKey: ['catalogProducts'], queryFn: () => inventoryApi.products() });
+  const locationsQuery = useQuery({ queryKey: ['locations', 'inventoryTree'], queryFn: () => inventoryApi.locations() });
+  const stocksQuery = useQuery({ queryKey: ['location-stocks'], queryFn: () => inventoryApi.locationStocks() });
+  const categoriesQuery = useQuery({ queryKey: ['catalogCategories'], queryFn: () => catalogApi.categories() });
+
+  const isLoading = productsQuery.isLoading || locationsQuery.isLoading || stocksQuery.isLoading || categoriesQuery.isLoading;
+
+  const locations = useMemo(() => locationsQuery.data || [], [locationsQuery.data]);
+  const allLocations = useMemo(() => locationsQuery.data || [], [locationsQuery.data]);
+  const stocks = useMemo(() => stocksQuery.data || [], [stocksQuery.data]);
+  const categories = useMemo(() => categoriesQuery.data || [], [categoriesQuery.data]);
+
+  const locationOptions = useMemo(() => [
+    { value: '', label: 'كل المخازن' },
+    ...locations.map((l: any) => ({ value: String(l.id), label: l.name })),
+  ], [locations]);
+  const rawProducts = useMemo(() => productsQuery.data || [], [productsQuery.data]);
+
+  const locationMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const l of allLocations) {
+      map.set(String(l.id), String(l.name));
+    }
+    return map;
+  }, [allLocations]);
+
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of categories) {
+      map.set(String(c.id), String(c.name));
+    }
+    return map;
+  }, [categories]);
+
+  const stocksByProductMap = useMemo(() => {
+    const map = new Map<string, { locationId: string; locationName: string; qty: number }[]>();
+    for (const s of stocks) {
+      const pId = String(s.productId);
+      let list = map.get(pId);
+      if (!list) {
+        list = [];
+        map.set(pId, list);
+      }
+      const locName = locationMap.get(String(s.locationId)) || `مخزن ${s.locationId}`;
+      list.push({ locationId: String(s.locationId), locationName: locName, qty: Number(s.qty) });
+    }
+    return map;
+  }, [stocks, locationMap]);
+
+  const productRows = useMemo((): ProductRow[] => {
+    return rawProducts.map((p: any) => {
+      const pId = String(p.id);
+      const locationStocks = stocksByProductMap.get(pId) || [];
+      const sumFromLocations = locationStocks.reduce((sum, s) => sum + s.qty, 0);
+      const globalStock = Number(p.stock || p.stockQty || 0);
+      const totalQty = Math.max(globalStock, sumFromLocations);
+      const unassignedQty = globalStock > sumFromLocations ? globalStock - sumFromLocations : 0;
+      const catName = categoryMap.get(String(p.categoryId)) || p.categoryName || 'بدون قسم';
+
+      return {
+        id: pId,
+        name: String(p.name || ''),
+        barcode: String(p.barcode || ''),
+        categoryId: String(p.categoryId || ''),
+        categoryName: catName,
+        locationStocks,
+        totalQty,
+        unassignedQty,
+        isUnassigned: locationStocks.length === 0 || unassignedQty > 0,
+      };
+    });
+  }, [rawProducts, stocksByProductMap, categoryMap]);
+
+  const filteredRows = useMemo(() => {
+    let rows = productRows;
+
+    // ── text search ────────────────────────────────────────────────────────────
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      rows = rows.filter((p) => p.name.toLowerCase().includes(q) || p.barcode.toLowerCase().includes(q));
+    }
+
+    if (showUnassigned) {
+      rows = rows.filter((p) => p.isUnassigned);
+    } else {
+      if (filterLocationId) {
+        // ── location filter: keep products that exist in this location ──────────
+        // Helper: effective qty for a product in the selected location
+        const locationQty = (p: ProductRow) =>
+          p.locationStocks.find((s) => s.locationId === filterLocationId)?.qty ?? 0;
+
+        // Keep only products that have a stock record in this location
+        rows = rows.filter((p) => p.locationStocks.some((s) => s.locationId === filterLocationId));
+
+        // When "show only with stock" is on, further filter by location qty > 0
+        if (showOnlyWithStock) {
+          rows = rows.filter((p) => locationQty(p) > 0);
+        }
+
+        // Sort by location qty
+        if (sortMode === 'qtyDesc') rows = [...rows].sort((a, b) => locationQty(b) - locationQty(a));
+        else if (sortMode === 'qtyAsc') rows = [...rows].sort((a, b) => locationQty(a) - locationQty(b));
+      } else {
+        // ── no location filter: use global totalQty ────────────────────────────
+        if (showOnlyWithStock) {
+          rows = rows.filter((p) => p.totalQty > 0);
+        }
+        if (sortMode === 'qtyDesc') rows = [...rows].sort((a, b) => b.totalQty - a.totalQty);
+        else if (sortMode === 'qtyAsc') rows = [...rows].sort((a, b) => a.totalQty - b.totalQty);
+      }
+    }
+
+    return rows;
+  }, [productRows, search, showOnlyWithStock, showUnassigned, filterLocationId, sortMode]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { categoryName: string; products: ProductRow[] }>();
+    for (const p of filteredRows) {
+      const key = p.categoryId || '__none__';
+      if (!map.has(key)) map.set(key, { categoryName: p.categoryName, products: [] });
+      map.get(key)!.products.push(p);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].categoryName.localeCompare(b[1].categoryName, 'ar'));
+  }, [filteredRows]);
+
+  const stats = useMemo(() => ({
+    totalProducts: productRows.length,
+    withStock: productRows.filter((p) => p.totalQty > 0).length,
+    unassigned: productRows.filter((p) => p.isUnassigned).length,
+    totalQty: productRows.reduce((s, p) => s + p.totalQty, 0),
+  }), [productRows]);
+
+  // Selection helpers
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectedProducts = useMemo(() => productRows.filter((p) => selectedIds.has(p.id)), [productRows, selectedIds]);
+
+  const handleDone = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['location-stocks'] });
+    queryClient.invalidateQueries({ queryKey: ['catalogProducts'] });
+    queryClient.invalidateQueries({ queryKey: ['locations', 'inventoryTree'] });
+    queryClient.invalidateQueries({ queryKey: ['catalogCategories'] });
+    setActiveModal(null);
+    setModalProducts([]);
+    setCategoryTransferData(null);
+    setSelectedIds(new Set());
+  }, [queryClient]);
+
+  const isCategoryExpanded = useCallback((catKey: string) => {
+    if (search.trim()) {
+      return !collapsedDuringSearch.has(catKey);
+    }
+    return expandedCategories.has(catKey);
+  }, [search, expandedCategories, collapsedDuringSearch]);
+
+  const toggleCategory = useCallback((catKey: string) => {
+    if (search.trim()) {
+      setCollapsedDuringSearch((prev) => {
+        const next = new Set(prev);
+        if (next.has(catKey)) next.delete(catKey);
+        else next.add(catKey);
+        return next;
+      });
+    } else {
+      setExpandedCategories((prev) => {
+        const next = new Set(prev);
+        if (next.has(catKey)) next.delete(catKey);
+        else next.add(catKey);
+        return next;
+      });
+    }
+  }, [search]);
+
+  const isAllExpanded = grouped.length > 0 && grouped.every(([catKey]) => isCategoryExpanded(catKey));
+  const toggleExpandCollapseAll = useCallback(() => {
+    if (isAllExpanded) {
+      if (search.trim()) {
+        setCollapsedDuringSearch(new Set(grouped.map(([catKey]) => catKey)));
+      } else {
+        setExpandedCategories(new Set());
+      }
+    } else {
+      if (search.trim()) {
+        setCollapsedDuringSearch(new Set());
+      } else {
+        setExpandedCategories(new Set(grouped.map(([catKey]) => catKey)));
+      }
+    }
+  }, [isAllExpanded, grouped, search]);
+
+  const allSelected = filteredRows.length > 0 && selectedIds.size === filteredRows.length;
+  const handleSelectAll = useCallback(() => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredRows.map(p => p.id)));
+    }
+  }, [allSelected, filteredRows]);
+
+  const handleRemoveLocation = async (productId: string, locationId: string) => {
+    try {
+      await inventoryApi.removeProductFromLocation(Number(locationId), Number(productId));
+      await queryClient.invalidateQueries({ queryKey: ['location-stocks'] });
+    } catch (e: any) {
+      if (e?.status === 404) {
+        // If it's already deleted in the backend but stuck in UI cache, force refetch
+        await queryClient.invalidateQueries({ queryKey: ['location-stocks'] });
+      } else {
+        systemAlert(e?.message || 'حدث خطأ غير متوقع');
+      }
+    }
+  };
+
+  const openTransfer = (products: ProductRow[]) => { setModalProducts(products); setActiveModal('transfer'); };
+  const openAssign = (products: ProductRow[]) => { setModalProducts(products); setActiveModal('assign'); };
+  const openCategoryTransfer = (name: string, products: ProductRow[]) => { setCategoryTransferData({ name, products }); setActiveModal('categoryTransfer'); };
+  const openConsolidate = (products: ProductRow[]) => { setModalProducts(products); setActiveModal('consolidate'); };
+
+  const statsItems = [
+    { key: 'total_products', label: 'إجمالي الأصناف', value: stats.totalProducts },
+    { key: 'with_stock', label: 'أصناف بها رصيد', value: stats.withStock },
+    { key: 'unassigned', label: 'أصناف غير مربوطة', value: stats.unassigned },
+    { key: 'total_units', label: 'إجمالي الوحدات بالمخازن', value: stats.totalQty.toLocaleString() },
+    { key: 'total_locations', label: 'عدد أماكن المخزون', value: locations.length },
+  ] as const;
+
+  return (
+    <div className="page-stack page-shell inventory-tree-page" dir="rtl">
+      <main className="document-prototype-column" style={{ maxWidth: '1280px', paddingBottom: '32px' }}>
+        {/* Header */}
+        <PageHeader
+          title={t('inventory.inventory_tree_page.s0', "شجرة المخازن الشاملة")}
+          description={t('inventory.inventory_tree_page.s1', "عرض تفصيلي لأرصدة الأصناف وتوزيعها على أماكن التخزين وإجراء عمليات المناقلة والتعيين الجماعية")}
+          actions={(
+            <div className="actions compact-actions page-header-actions">
+              <Button variant="primary" onClick={() => navigate('/inventory/issue-order/new')}>
+                {t('inventory.inventory_tree_page.s2', "+ إذن صرف جديد")}
+              </Button>
+            </div>
+          )}
+        />
+
+      <WarehousesNavTabs currentTab="tree" />
+
+      {/* Stats */}
+      <StatsGrid items={statsItems} className="stats-grid compact-grid inventory-tree-stats-grid" />
+
+      {/* Filters Toolbar */}
+      <div className="inventory-tree-toolbar" style={{
+        background: '#ffffff',
+        border: '1px solid var(--border, #e2e8f0)',
+        borderRadius: '12px',
+        padding: '12px 14px',
+        marginBottom: '16px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '10px',
+        alignItems: 'center',
+        boxShadow: '0 2px 6px rgba(15, 23, 42, 0.02)',
+      }}>
+        <div style={{ position: 'relative', flex: '1 1 220px' }}>
+          <input
+            type="text"
+            placeholder={t('inventory.inventory_tree_page.s4', "ابحث باسم الصنف أو الباركود...")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--border, #cbd5e1)',
+              fontSize: '13px',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+        <div style={{ flex: '1 1 170px', minWidth: '150px' }}>
+          <CustomSelect
+            value={filterLocationId}
+            onChange={(val) => { setFilterLocationId(val); setShowUnassigned(false); }}
+            options={locationOptions}
+            placeholder={t('inventory.inventory_tree_page.s5', "كل المخازن")}
+          />
+        </div>
+        <div style={{ flex: '1 1 170px', minWidth: '150px' }}>
+          <CustomSelect
+            value={sortMode}
+            onChange={(val) => setSortMode(val as SortMode)}
+            options={SORT_OPTIONS}
+            placeholder={t('inventory.inventory_tree_page.s6', "ترتيب افتراضي")}
+          />
+        </div>
+        <div className="inventory-tree-checkboxes-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap', userSelect: 'none', color: '#334155' }}>
+            <input
+              type="checkbox"
+              checked={showOnlyWithStock}
+              onChange={(e) => { setShowOnlyWithStock(e.target.checked); if (e.target.checked) setShowUnassigned(false); }}
+              style={{ width: '15px', height: '15px', accentColor: 'var(--primary, #170c5c)' }}
+            />
+            {t('inventory.inventory_tree_page.s7', "بها رصيد فقط")}
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap', userSelect: 'none', color: '#334155' }}>
+            <input
+              type="checkbox"
+              checked={showUnassigned}
+              onChange={(e) => { setShowUnassigned(e.target.checked); if (e.target.checked) setShowOnlyWithStock(false); }}
+              style={{ width: '15px', height: '15px', accentColor: 'var(--primary, #170c5c)' }}
+            />
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              {t('inventory.inventory_tree_page.s8', "غير مربوطة بمخزن")} <AlertTriangleIcon size={13} color="#d97706" />
+            </span>
+          </label>
+        </div>
+        {(search || filterLocationId || showOnlyWithStock || showUnassigned || sortMode !== 'default') && (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setSearch('');
+              setFilterLocationId('');
+              setShowOnlyWithStock(false);
+              setShowUnassigned(false);
+              setSortMode('default');
+              setCollapsedDuringSearch(new Set());
+            }}
+            style={{ fontSize: '11px', height: '28px', padding: '2px 10px' }}
+          >
+            {t('inventory.inventory_tree_page.s9', "تفريغ الفلاتر")}
+          </Button>
+        )}
+      </div>
+
+      {/* List Sub-header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ fontSize: '13px', color: '#64748b' }}>
+          {t('inventory.inventory_tree_page.s10', "عرض")} <strong style={{ color: '#0f172a' }}>{filteredRows.length}</strong> {t('inventory.inventory_tree_page.s11', "صنف من أصل")} {productRows.length}
+          {selectedIds.size > 0 && <span style={{ marginInlineStart: '8px', color: 'var(--primary, #170c5c)', fontWeight: 800 }}>— ({selectedIds.size} {t('inventory.inventory_tree_page.s12', "صنف محدد)")}</span>}
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Button
+            variant={allSelected ? 'primary' : 'secondary'}
+            onClick={handleSelectAll}
+          >
+            {allSelected ? t('inventory.inventory_tree_page.s13', "إلغاء التحديد") : t('inventory.inventory_tree_page.s14', "تحديد الكل")}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={toggleExpandCollapseAll}
+          >
+            {isAllExpanded ? t('inventory.inventory_tree_page.s15', "ضم كافة الأقسام ◀") : t('inventory.inventory_tree_page.s16', "فرد كافة الأقسام ▼")}
+          </Button>
+        </div>
+      </div>
+
+      {/* Tree */}
+      {isLoading ? (
+        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-secondary, #888)' }}>
+          {t('inventory.inventory_tree_page.s17', "جاري التحميل...")}
+        </div>
+      ) : filteredRows.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-secondary, #888)' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}><SearchIcon size={40} color="#94a3b8" /></div>
+          {t('inventory.inventory_tree_page.s18', "لا توجد نتائج")}
+        </div>
+      ) : (
+        <div style={{ paddingBottom: selectedIds.size > 0 ? '80px' : '0' }}>
+          {grouped.map(([catKey, { categoryName, products }]) => (
+            <CategorySection
+              key={catKey}
+              categoryName={categoryName}
+              products={products}
+              locations={locations as any}
+              filterLocationId={filterLocationId}
+              selectedIds={selectedIds}
+              collapsed={!isCategoryExpanded(catKey)}
+              onToggleCollapse={() => toggleCategory(catKey)}
+              onToggleSelect={toggleSelect}
+              onTransfer={(p) => openTransfer([p])}
+              onAssign={(p) => openAssign([p])}
+              onConsolidate={(p) => openConsolidate([p])}
+              onTransferCategory={openCategoryTransfer}
+              onRemoveLocation={handleRemoveLocation}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <BulkActionBar
+          count={selectedIds.size}
+          onAssign={() => openAssign(selectedProducts)}
+            onTransfer={() => openTransfer(selectedProducts)}
+            onConsolidate={() => openConsolidate(selectedProducts)}
+          onClear={() => setSelectedIds(new Set())}
+        />
+      )}
+
+      {/* Modals */}
+      {activeModal === 'assign' && (
+        <QuickAssignModal
+          products={modalProducts}
+          locations={locations as any}
+          onClose={() => setActiveModal(null)}
+          onDone={handleDone}
+        />
+      )}
+      {activeModal === 'transfer' && (
+        <QuickTransferModal
+          products={modalProducts}
+          locations={locations as any}
+          onClose={() => setActiveModal(null)}
+          onDone={handleDone}
+        />
+      )}
+      {activeModal === 'categoryTransfer' && categoryTransferData && (
+        <CategoryTransferModal
+          categoryName={categoryTransferData.name}
+          products={categoryTransferData.products}
+          locations={locations as any}
+          onClose={() => setActiveModal(null)}
+          onDone={handleDone}
+        />
+      )}
+      {activeModal === 'consolidate' && (
+        <QuickConsolidateModal
+          products={modalProducts}
+          locations={locations as any}
+          onClose={() => setActiveModal(null)}
+          onDone={handleDone}
+        />
+      )}
+      </main>
+    </div>
+  );
+}
+
+
+
+
+

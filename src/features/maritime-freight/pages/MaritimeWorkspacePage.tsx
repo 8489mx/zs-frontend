@@ -1,0 +1,10 @@
+export { MaritimeLayout, MaritimeLayout as MaritimeWorkspacePage } from './MaritimeLayout';
+export { MaritimeInquiriesPage } from './MaritimeInquiriesPage';
+export { MaritimeRfqsPage } from './MaritimeRfqsPage';
+export { MaritimeMatrixPage } from './MaritimeMatrixPage';
+export { MaritimeQuotationsPage } from './MaritimeQuotationsPage';
+export { MaritimeJobsPage } from './MaritimeJobsPage';
+export { MaritimeContainersPage } from './MaritimeContainersPage';
+export { MaritimeLinesPage } from './MaritimeLinesPage';
+export { MaritimeSettingsPage } from './MaritimeSettingsPage';
+export { MaritimeLayout as default } from './MaritimeLayout';

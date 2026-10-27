@@ -1,0 +1,869 @@
+import { http } from '@/lib/http';
+import { postIdempotentSubcontractorPayment } from '@/lib/api/idempotent-subcontractor-payment';
+import {
+  ContractingProject,
+  ContractingBoqItem,
+  ContractingChangeOrder,
+  ContractingInvoice,
+  ContractingSubcontract,
+  ContractingSiteDailyLog,
+  ContractingRfi,
+  ContractingScheduleTask,
+  ContractingMaterialRequisition,
+  ContractingSubcontractor,
+  ContractingSubcontractorPayment,
+  SubcontractorLedgerResponse,
+} from '../contracting.types';
+
+function toQueryString(params?: Record<string, any>): string {
+  if (!params) return '';
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      searchParams.append(key, String(val));
+    }
+  });
+  const qs = searchParams.toString();
+  return qs ? `?${qs}` : '';
+}
+
+export const contractingApi = {
+  // Projects
+  getProjects: (params?: { status?: string; search?: string }) =>
+    http<ContractingProject[]>(`/api/contracting/projects${toQueryString(params)}`),
+
+  getProjectById: (id: string) =>
+    http<ContractingProject>(`/api/contracting/projects/${id}`),
+
+  createProject: (data: Partial<ContractingProject>) =>
+    http<ContractingProject>('/api/contracting/projects', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateProject: (id: string, data: Partial<ContractingProject>) =>
+    http<ContractingProject>(`/api/contracting/projects/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteProject: (id: string) =>
+    http<{ success: boolean; message: string }>(`/api/contracting/projects/${id}`, {
+      method: 'DELETE',
+    }),
+
+  createTenderRevision: (id: string) =>
+    http<ContractingProject>(`/api/contracting/projects/${id}/revisions`, {
+      method: 'POST',
+    }),
+
+  markTenderLost: (id: string, data: { lossReason: string; lossNotes?: string; competitorPrice?: number }) =>
+    http<ContractingProject>(`/api/contracting/projects/${id}/mark-lost`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  awardTender: (
+    id: string,
+    data: {
+      contractRef?: string;
+      contractDate?: string;
+      downPaymentAmount?: number;
+      retentionPercent?: number;
+      projectManager?: string;
+      consultantName?: string;
+      startDate?: string;
+    }
+  ) =>
+    http<ContractingProject>(`/api/contracting/projects/${id}/award`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // BOQ / Schedule of Values
+  getBoqItems: (projectId: string) =>
+    http<ContractingBoqItem[]>(`/api/contracting/projects/${projectId}/boq`),
+
+  createBoqItem: (projectId: string, data: Partial<ContractingBoqItem>) =>
+    http<ContractingBoqItem>(`/api/contracting/projects/${projectId}/boq`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  batchCreateBoqItems: (projectId: string, items: Array<Partial<ContractingBoqItem>>) =>
+    http<{ success: boolean; count: number; items: ContractingBoqItem[] }>(
+      `/api/contracting/projects/${projectId}/boq/batch`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      }
+    ),
+
+  updateBoqItem: (id: string, data: Partial<ContractingBoqItem>) =>
+    http<ContractingBoqItem>(`/api/contracting/boq/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteBoqItem: (id: string) =>
+    http<{ success: boolean }>(`/api/contracting/boq/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Change Orders
+  getChangeOrders: (projectId: string) =>
+    http<ContractingChangeOrder[]>(`/api/contracting/projects/${projectId}/change-orders`),
+
+  createChangeOrder: (projectId: string, data: Partial<ContractingChangeOrder>) =>
+    http<ContractingChangeOrder>(`/api/contracting/projects/${projectId}/change-orders`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateChangeOrderStatus: (id: string, data: { status: string; notes?: string }) =>
+    http<ContractingChangeOrder>(`/api/contracting/change-orders/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // Invoices / IPCs
+  getInvoices: (projectId: string, type: 'client' | 'subcontractor' = 'client') =>
+    http<ContractingInvoice[]>(`/api/contracting/projects/${projectId}/invoices?type=${type}`),
+
+  getInvoiceById: (id: string) =>
+    http<ContractingInvoice>(`/api/contracting/invoices/${id}`),
+
+  createInvoice: (projectId: string, data: any) =>
+    http<ContractingInvoice>(`/api/contracting/projects/${projectId}/invoices`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  approveInvoice: (id: string) =>
+    http<ContractingInvoice>(`/api/contracting/invoices/${id}/approve`, {
+      method: 'POST',
+    }),
+
+  postInvoiceJournal: (id: string) =>
+    http<{ success: boolean; journalEntryId: number; entryNo: string; message?: string }>(
+      `/api/contracting/invoices/${id}/post-journal`,
+      {
+        method: 'POST',
+      }
+    ),
+
+  // Subcontracts
+  getSubcontracts: (projectId: string) =>
+    http<ContractingSubcontract[]>(`/api/contracting/projects/${projectId}/subcontracts`),
+
+  createSubcontract: (projectId: string, data: Partial<ContractingSubcontract>) =>
+    http<ContractingSubcontract>(`/api/contracting/projects/${projectId}/subcontracts`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Subcontractor Master Directory & Ledger
+  getSubcontractors: (params?: { search?: string; tradeSpecialty?: string; status?: string }) =>
+    http<ContractingSubcontractor[]>(`/api/contracting/subcontractors${toQueryString(params)}`),
+
+  getSubcontractorById: (id: number) =>
+    http<ContractingSubcontractor>(`/api/contracting/subcontractors/${id}`),
+
+  createSubcontractor: (data: Partial<ContractingSubcontractor>) =>
+    http<ContractingSubcontractor>('/api/contracting/subcontractors', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateSubcontractor: (id: number, data: Partial<ContractingSubcontractor>) =>
+    http<ContractingSubcontractor>(`/api/contracting/subcontractors/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteSubcontractor: (id: number) =>
+    http<{ success: boolean; message: string }>(`/api/contracting/subcontractors/${id}`, {
+      method: 'DELETE',
+    }),
+
+  getSubcontractorLedger: (id: number, params?: { projectId?: string; fromDate?: string; toDate?: string }) =>
+    http<SubcontractorLedgerResponse>(`/api/contracting/subcontractors/${id}/ledger${toQueryString(params)}`),
+
+  createSubcontractorPayment: (data: {
+    subcontractorId: number;
+    projectId?: string;
+    subcontractId?: string;
+    invoiceId?: string;
+    amount: number;
+    paymentDate?: string;
+    paymentMethod?: 'cash' | 'bank_transfer' | 'check';
+    referenceNumber?: string;
+    notes?: string;
+  }) =>
+    postIdempotentSubcontractorPayment<ContractingSubcontractorPayment>(data),
+
+  // Daily Site Logs
+  getDailyLogs: (projectId: string) =>
+    http<ContractingSiteDailyLog[]>(`/api/contracting/projects/${projectId}/daily-logs`),
+
+  createDailyLog: (projectId: string, data: Partial<ContractingSiteDailyLog>) =>
+    http<ContractingSiteDailyLog>(`/api/contracting/projects/${projectId}/daily-logs`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // RFIs
+  getRfiList: (projectId: string) =>
+    http<ContractingRfi[]>(`/api/contracting/projects/${projectId}/rfis`),
+
+  createRfi: (projectId: string, data: Partial<ContractingRfi>) =>
+    http<ContractingRfi>(`/api/contracting/projects/${projectId}/rfis`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  answerRfi: (id: string, data: { answer: string; notes?: string }) =>
+    http<ContractingRfi>(`/api/contracting/rfis/${id}/answer`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // Schedule Tasks (Gantt & WBS)
+  getScheduleTasks: (projectId: string) =>
+    http<ContractingScheduleTask[]>(`/api/contracting/projects/${projectId}/tasks`),
+
+  createScheduleTask: (projectId: string, data: Partial<ContractingScheduleTask>) =>
+    http<ContractingScheduleTask>(`/api/contracting/projects/${projectId}/tasks`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateScheduleTask: (id: string, data: Partial<ContractingScheduleTask>) =>
+    http<ContractingScheduleTask>(`/api/contracting/tasks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteScheduleTask: (id: string) =>
+    http<{ success: boolean; message: string }>(`/api/contracting/tasks/${id}`, {
+      method: 'DELETE',
+    }),
+
+  getResourceLoadingHistogram: (projectId: string) =>
+    http<import('../contracting.types').ResourceLoadingHistogram>(`/api/contracting/projects/${projectId}/resource-loading`),
+
+  // Material Requisitions (أذون صرف الخامات)
+  getMaterialRequisitions: (projectId: string) =>
+    http<ContractingMaterialRequisition[]>(`/api/contracting/projects/${projectId}/material-requisitions`),
+
+  createMaterialRequisition: (projectId: string, data: Partial<ContractingMaterialRequisition>) =>
+    http<ContractingMaterialRequisition>(`/api/contracting/projects/${projectId}/material-requisitions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteMaterialRequisition: (id: string) =>
+    http<{ success: boolean; message: string }>(`/api/contracting/material-requisitions/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Master Price List
+  getMasterPriceList: (params?: { itemType?: string; category?: string; search?: string }) =>
+    http<any[]>(`/api/contracting/price-list${toQueryString(params)}`),
+
+  createMasterPriceItem: (data: any) =>
+    http<any>('/api/contracting/price-list', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateMasterPriceItem: (id: string, data: any) =>
+    http<any>(`/api/contracting/price-list/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteMasterPriceItem: (id: string) =>
+    http<{ success: boolean }>(`/api/contracting/price-list/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Engineering Constants & Auto-Pricing
+  getEngineeringConstants: () =>
+    http<any[]>('/api/contracting/engineering-constants'),
+
+  createEngineeringConstant: (data: any) =>
+    http<any>('/api/contracting/engineering-constants', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  autoPriceBoqItem: (data: {
+    constantCode: string;
+    quantity: number;
+    customWastePercent?: number;
+    customOverheadPercent?: number;
+    customProfitMarkupPercent?: number;
+  }) =>
+    http<any>('/api/contracting/auto-price-boq', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Cost Snapshots
+  getCostSnapshots: (projectId: string) =>
+    http<any[]>(`/api/contracting/projects/${projectId}/snapshots`),
+
+  createCostSnapshot: (projectId: string, data: { snapshotName: string }) =>
+    http<any>(`/api/contracting/projects/${projectId}/snapshots`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Retention & Guarantees
+  getRetentionRecords: (params?: { projectId?: string; status?: string }) =>
+    http<any[]>(`/api/contracting/retentions${toQueryString(params)}`),
+
+  createRetentionRecord: (projectId: string, data: any) =>
+    http<any>(`/api/contracting/projects/${projectId}/retentions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  releaseRetentionRecord: (id: string, data: { releaseAmount: number; notes?: string }) =>
+    http<any>(`/api/contracting/retentions/${id}/release`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Payment Holds
+  getPaymentHolds: (params?: { projectId?: string; isReleased?: boolean }) =>
+    http<any[]>(`/api/contracting/payment-holds${toQueryString(params)}`),
+
+  createPaymentHold: (projectId: string, data: any) =>
+    http<any>(`/api/contracting/projects/${projectId}/payment-holds`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  releasePaymentHold: (id: string, data?: { releaseNotes?: string }) =>
+    http<any>(`/api/contracting/payment-holds/${id}/release`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
+
+  // Supplier Returns
+  getSupplierReturns: (projectId?: string) =>
+    http<any[]>(`/api/contracting/supplier-returns${toQueryString({ projectId })}`),
+
+  createSupplierReturn: (projectId: string, data: any) =>
+    http<any>(`/api/contracting/projects/${projectId}/supplier-returns`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Labor Attendance
+  getLaborAttendance: (params?: { projectId?: string; workDate?: string }) =>
+    http<any[]>(`/api/contracting/labor-attendance${toQueryString(params)}`),
+
+  createLaborAttendance: (projectId: string, data: any) =>
+    http<any>(`/api/contracting/projects/${projectId}/labor-attendance`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Petty Cash Custody
+  getPettyCashRecords: (params?: { projectId?: string; status?: string }) =>
+    http<any[]>(`/api/contracting/petty-cash${toQueryString(params)}`),
+
+  createPettyCash: (projectId: string, data: any) =>
+    http<any>(`/api/contracting/projects/${projectId}/petty-cash`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  settlePettyCash: (id: string, data: { receipts: any[]; closureNotes?: string }) =>
+    http<any>(`/api/contracting/petty-cash/${id}/settle`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Government Licenses
+  getGovernmentLicenses: (params?: { projectId?: string; status?: string }) =>
+    http<any[]>(`/api/contracting/government-licenses${toQueryString(params)}`),
+
+  createGovernmentLicense: (projectId: string, data: any) =>
+    http<any>(`/api/contracting/projects/${projectId}/government-licenses`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Executive Intelligence & Planning
+  getProjectHealthScore: (projectId: string) =>
+    http<any>(`/api/contracting/projects/${projectId}/health-score`),
+
+  getCashForecast: (projectId?: string) =>
+    http<any>(`/api/contracting/cash-forecast${toQueryString({ projectId })}`),
+
+  getProjectMaterialRequirements: (projectId: string) =>
+    http<any>(`/api/contracting/projects/${projectId}/material-requirements`),
+
+  getBoqProfitabilityAnalysis: (projectId: string) =>
+    http<any>(`/api/contracting/projects/${projectId}/profitability`),
+
+  // Multi-Trade Master BOQ Library & Project Import
+  getMasterBoqTrades: () =>
+    http<import('../contracting.types').MasterBoqTrade[]>('/api/contracting/master-boq/trades'),
+
+  getMasterBoqLibrary: (params?: { tradeCategory?: string; search?: string; status?: string }) =>
+    http<import('../contracting.types').MasterBoqItem[]>(`/api/contracting/master-boq/items${toQueryString(params)}`),
+
+  createMasterBoqItem: (data: any) =>
+    http<import('../contracting.types').MasterBoqItem>('/api/contracting/master-boq/items', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  bulkImportMasterBoqItems: (items: any[]) =>
+    http<{ success: boolean; count: number; message: string }>('/api/contracting/master-boq/items/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    }),
+
+  updateMasterBoqItem: (id: string, data: any) =>
+    http<import('../contracting.types').MasterBoqItem>(`/api/contracting/master-boq/items/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  toggleMasterBoqItemStatus: (id: string, isActive?: boolean) =>
+    http<{ success: boolean; isActive: boolean; item: any }>(`/api/contracting/master-boq/items/${id}/toggle-status`, {
+      method: 'PUT',
+      body: JSON.stringify({ isActive }),
+    }),
+
+  deleteMasterBoqItem: (id: string) =>
+    http<{ success: boolean; message: string }>(`/api/contracting/master-boq/items/${id}`, {
+      method: 'DELETE',
+    }),
+
+  importMasterBoqToProject: (projectId: string, itemIds: (string | number)[]) =>
+    http<{ success: boolean; importedCount: number; projectId: string; items: any[] }>(
+      `/api/contracting/projects/${projectId}/boq/import-master`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ itemIds }),
+      },
+    ),
+
+  // 1. BOQ CAD Quantity Takeoffs
+  getBoqTakeoffs: (boqItemId: string) =>
+    http<import('../contracting.types').ContractingBoqTakeoff[]>(`/api/contracting/boq/${boqItemId}/takeoffs`),
+
+  saveBoqTakeoffs: (boqItemId: string, data: { takeoffs: import('../contracting.types').ContractingBoqTakeoff[]; syncToBoqQuantity?: boolean }) =>
+    http<{ success: boolean; totalCalculatedQty: number; count: number; takeoffs: any[] }>(
+      `/api/contracting/boq/${boqItemId}/takeoffs`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  // 2. Site Mobilization & Worker Housing Expenses
+  getMobilizationExpenses: (projectId: string) =>
+    http<import('../contracting.types').ContractingMobilizationSummary>(`/api/contracting/projects/${projectId}/mobilization`),
+
+  getSiteMobilizationExpenses: (projectId: string) =>
+    http<import('../contracting.types').ContractingMobilizationSummary>(`/api/contracting/projects/${projectId}/mobilization`),
+
+  createMobilizationExpense: (projectId: string, data: Partial<import('../contracting.types').ContractingSiteMobilizationExpense>) =>
+    http<import('../contracting.types').ContractingSiteMobilizationExpense>(
+      `/api/contracting/projects/${projectId}/mobilization`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  createSiteMobilizationExpense: (projectId: string, data: Partial<import('../contracting.types').ContractingSiteMobilizationExpense>) =>
+    http<import('../contracting.types').ContractingSiteMobilizationExpense>(
+      `/api/contracting/projects/${projectId}/mobilization`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  deleteMobilizationExpense: (id: string) =>
+    http<{ success: boolean }>(`/api/contracting/mobilization/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // 3. Labor Attendance & Overtime Records
+  getLaborAttendanceRecords: (projectId: string, date?: string) =>
+    http<{ projectId: string; totalPayable: number; totalOvertimeHours: number; recordsCount: number; records: import('../contracting.types').ContractingLaborAttendanceRecord[] }>(
+      `/api/contracting/projects/${projectId}/labor-records${toQueryString({ date })}`,
+    ),
+
+  recordLaborAttendance: (projectId: string, data: Partial<import('../contracting.types').ContractingLaborAttendanceRecord>) =>
+    http<import('../contracting.types').ContractingLaborAttendanceRecord>(
+      `/api/contracting/projects/${projectId}/labor-records`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  deleteLaborAttendanceRecord: (id: string) =>
+    http<{ success: boolean }>(`/api/contracting/labor-records/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // 4. Client Payment Milestones & In-Kind Barter
+  getClientPaymentMilestones: (projectId: string) =>
+    http<{ projectId: string; totalScheduled: number; totalReceived: number; totalInKindSettled: number; milestones: import('../contracting.types').ContractingClientPaymentMilestone[] }>(
+      `/api/contracting/projects/${projectId}/milestones`,
+    ),
+
+  createClientPaymentMilestone: (projectId: string, data: Partial<import('../contracting.types').ContractingClientPaymentMilestone>) =>
+    http<import('../contracting.types').ContractingClientPaymentMilestone>(
+      `/api/contracting/projects/${projectId}/milestones`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  recordInKindBarterDeduction: (milestoneId: string, data: { inKindUnitRef: string; inKindValuation: number; notes?: string }) =>
+    http<import('../contracting.types').ContractingClientPaymentMilestone>(
+      `/api/contracting/milestones/${milestoneId}/barter-settlement`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  deleteClientPaymentMilestone: (id: string) =>
+    http<{ success: boolean }>(`/api/contracting/milestones/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // 5. Equipment & Tools Asset Tracking
+  getEquipmentAssets: (params?: { projectId?: string; category?: string; operationalStatus?: string; search?: string }) =>
+    http<import('../contracting.types').ContractingEquipmentAsset[]>(`/api/contracting/equipment${toQueryString(params)}`),
+
+  createEquipmentAsset: (data: Partial<import('../contracting.types').ContractingEquipmentAsset>) =>
+    http<import('../contracting.types').ContractingEquipmentAsset>('/api/contracting/equipment', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  transferEquipmentAsset: (equipmentId: string, data: { toProjectId?: string; toProjectName?: string; transferDate?: string; dispatchedBy: string; receivedBy: string; conditionOnDispatch?: string; conditionOnReceipt?: string; notes?: string }) =>
+    http<import('../contracting.types').ContractingEquipmentAsset>(`/api/contracting/equipment/${equipmentId}/transfer`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getEquipmentTransfers: (equipmentId?: string) =>
+    http<import('../contracting.types').ContractingEquipmentTransfer[]>(`/api/contracting/equipment-transfers${toQueryString({ equipmentId })}`),
+
+  // 6. Supplier Price Memory & Rating Directory
+  getSupplierPriceMemory: (params?: { supplierId?: number; materialName?: string; governorate?: string; paymentTerms?: string }) =>
+    http<import('../contracting.types').ContractingSupplierPriceMemory[]>(`/api/contracting/supplier-price-memory${toQueryString(params)}`),
+
+  recordSupplierPriceMemory: (data: Partial<import('../contracting.types').ContractingSupplierPriceMemory>) =>
+    http<import('../contracting.types').ContractingSupplierPriceMemory>('/api/contracting/supplier-price-memory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // 7. Item-Level Direct Profitability Ledger
+  getItemProfitabilityLedger: (projectId: string) =>
+    http<import('../contracting.types').ContractingItemProfitabilitySummary>(`/api/contracting/projects/${projectId}/item-profitability`),
+
+  // 8. Comprehensive 5-Stream Project Cost Breakdown
+  getProjectCostBreakdown: (projectId: string) =>
+    http<import('../contracting.types').ContractingProjectCostBreakdown>(`/api/contracting/projects/${projectId}/cost-breakdown`),
+
+  // 9. Work Inspection Requests (WIR / طلبات استلام الأعمال)
+  getInspectionRequests: (projectId: string, params?: { status?: string }) =>
+    http<import('../contracting.types').ContractingInspectionRequest[]>(
+      `/api/contracting/projects/${projectId}/inspection-requests${toQueryString(params)}`,
+    ),
+
+  createInspectionRequest: (projectId: string, data: Partial<import('../contracting.types').ContractingInspectionRequest>) =>
+    http<import('../contracting.types').ContractingInspectionRequest>(
+      `/api/contracting/projects/${projectId}/inspection-requests`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  updateInspectionRequestStatus: (
+    id: string,
+    data: { status: string; consultantName?: string; consultantNotes?: string; consultantDecisionDate?: string },
+  ) =>
+    http<import('../contracting.types').ContractingInspectionRequest>(`/api/contracting/inspection-requests/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteInspectionRequest: (id: string) =>
+    http<{ success: boolean }>(`/api/contracting/inspection-requests/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // 10. Punch List / Snag Items (قائمة العيوب والملاحظات)
+  getSnagItems: (projectId: string, params?: { status?: string; severity?: string }) =>
+    http<import('../contracting.types').ContractingSnagItem[]>(
+      `/api/contracting/projects/${projectId}/snag-items${toQueryString(params)}`,
+    ),
+
+  createSnagItem: (projectId: string, data: Partial<import('../contracting.types').ContractingSnagItem>) =>
+    http<import('../contracting.types').ContractingSnagItem>(`/api/contracting/projects/${projectId}/snag-items`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateSnagItemStatus: (id: string, data: { status: string; rectificationNotes?: string; closedDate?: string }) =>
+    http<import('../contracting.types').ContractingSnagItem>(`/api/contracting/snag-items/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteSnagItem: (id: string) =>
+    http<{ success: boolean }>(`/api/contracting/snag-items/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // 11. Project Handovers (الاستلام الابتدائي والنهائي)
+  getProjectHandovers: (projectId: string) =>
+    http<import('../contracting.types').ContractingProjectHandover[]>(`/api/contracting/projects/${projectId}/handovers`),
+
+  createProjectHandover: (projectId: string, data: Partial<import('../contracting.types').ContractingProjectHandover>) =>
+    http<import('../contracting.types').ContractingProjectHandover>(`/api/contracting/projects/${projectId}/handovers`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  approveProjectHandover: (id: string, data: { approvedBy: string; notes?: string }) =>
+    http<import('../contracting.types').ContractingProjectHandover>(`/api/contracting/handovers/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // 12. Material & Shop Drawing Submittals (MAR / MAS)
+  getSubmittals: (projectId: string) =>
+    http<import('../contracting.types').ContractingSubmittal[]>(`/api/contracting/projects/${projectId}/submittals`),
+
+  createSubmittal: (projectId: string, data: Partial<import('../contracting.types').ContractingSubmittal>) =>
+    http<import('../contracting.types').ContractingSubmittal>(`/api/contracting/projects/${projectId}/submittals`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateSubmittalStatus: (
+    id: string,
+    data: { status: string; consultantName?: string; consultantComments?: string; consultantReviewDate?: string },
+  ) =>
+    http<import('../contracting.types').ContractingSubmittal>(`/api/contracting/submittals/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // 13. Material Price Escalation & Fluctuation Claims
+  getMaterialEscalations: (projectId: string) =>
+    http<import('../contracting.types').ContractingMaterialEscalation[]>(`/api/contracting/projects/${projectId}/escalations`),
+
+  createMaterialEscalation: (projectId: string, data: Partial<import('../contracting.types').ContractingMaterialEscalation>) =>
+    http<import('../contracting.types').ContractingMaterialEscalation>(`/api/contracting/projects/${projectId}/escalations`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateMaterialEscalationStatus: (id: string, data: { status: string; ipcInvoiceId?: string; notes?: string }) =>
+    http<import('../contracting.types').ContractingMaterialEscalation>(`/api/contracting/escalations/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // 14. Subcontractor Back-Charges & Penalties
+  getSubcontractorBackcharges: (projectId: string) =>
+    http<import('../contracting.types').ContractingSubcontractorBackcharge[]>(`/api/contracting/projects/${projectId}/backcharges`),
+
+  createSubcontractorBackcharge: (projectId: string, data: Partial<import('../contracting.types').ContractingSubcontractorBackcharge>) =>
+    http<import('../contracting.types').ContractingSubcontractorBackcharge>(`/api/contracting/projects/${projectId}/backcharges`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateBackchargeStatus: (id: string, data: { status: string; appliedIpcInvoiceId?: string }) =>
+    http<import('../contracting.types').ContractingSubcontractorBackcharge>(`/api/contracting/backcharges/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // 15. Equipment Fuel & Operating Meter Logs
+  getEquipmentFuelLogs: (projectId: string) =>
+    http<import('../contracting.types').ContractingEquipmentFuelLog[]>(`/api/contracting/projects/${projectId}/fuel-logs`),
+
+  createEquipmentFuelLog: (projectId: string, data: Partial<import('../contracting.types').ContractingEquipmentFuelLog>) =>
+    http<import('../contracting.types').ContractingEquipmentFuelLog>(`/api/contracting/projects/${projectId}/fuel-logs`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // 16. Earned Value Management (EVM) & S-Curve Metrics
+  getProjectEvmMetrics: (projectId: string) =>
+    http<import('../contracting.types').ContractingProjectEvmMetrics>(`/api/contracting/projects/${projectId}/evm-metrics`),
+
+  // 17. Bank Guarantees & Gateway G1 (خطابات الضمان البنكية والبوابة الرقابية)
+  getGuarantees: (params?: { projectId?: string; subcontractId?: string; subcontractorId?: number; status?: string; guaranteeType?: string }) =>
+    http<import('../contracting.types').ContractingGuarantee[]>(`/api/contracting/guarantees${toQueryString(params)}`),
+
+  getGuaranteeExpiryAlerts: (projectId?: string) =>
+    http<import('../contracting.types').GuaranteeExpiryAlert[]>(`/api/contracting/guarantees/alerts${toQueryString({ projectId })}`),
+
+  getGuaranteeById: (id: string) =>
+    http<import('../contracting.types').ContractingGuarantee>(`/api/contracting/guarantees/${id}`),
+
+  createGuarantee: (data: any) =>
+    http<import('../contracting.types').ContractingGuarantee>('/api/contracting/guarantees', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateGuarantee: (id: string, data: any) =>
+    http<import('../contracting.types').ContractingGuarantee>(`/api/contracting/guarantees/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  extendGuarantee: (id: string, data: { newExpiryDate: string; newClaimExpiryDate?: string; notes?: string }) =>
+    http<import('../contracting.types').ContractingGuarantee>(`/api/contracting/guarantees/${id}/extend`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  releaseGuarantee: (id: string, data: { releaseDate: string; notes?: string }) =>
+    http<import('../contracting.types').ContractingGuarantee>(`/api/contracting/guarantees/${id}/release`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  invokeGuarantee: (id: string, data: { invocationDate: string; invokedAmount?: number; reason: string }) =>
+    http<import('../contracting.types').ContractingGuarantee>(`/api/contracting/guarantees/${id}/invoke`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // 17. Field Indirect Cost Allocation (Track 1 - AACE RP 10S-90 / 34R-05)
+  getCostPools: (projectId: string) =>
+    http<import('../contracting.types').CostPool[]>(`/api/contracting/projects/${projectId}/cost-pools`),
+
+  createCostPool: (projectId: string, data: import('../contracting.types').CreateCostPoolPayload) =>
+    http<import('../contracting.types').CostPool>(`/api/contracting/projects/${projectId}/cost-pools`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getIndirectExpenses: (projectId: string, poolId?: string) =>
+    http<import('../contracting.types').IndirectExpense[]>(
+      `/api/contracting/projects/${projectId}/indirect-expenses${poolId ? `?poolId=${poolId}` : ''}`,
+    ),
+
+  createIndirectExpense: (projectId: string, data: import('../contracting.types').CreateIndirectExpensePayload) =>
+    http<import('../contracting.types').IndirectExpense>(`/api/contracting/projects/${projectId}/indirect-expenses`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getAllocationBatches: (projectId: string) =>
+    http<import('../contracting.types').AllocationBatch[]>(`/api/contracting/projects/${projectId}/allocation-batches`),
+
+  previewBatchAllocation: (projectId: string, data: import('../contracting.types').CreateAllocationBatchPayload) =>
+    http<import('../contracting.types').BatchAllocationSummary>(
+      `/api/contracting/projects/${projectId}/allocation-batches/preview`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  postBatchAllocation: (projectId: string, data: import('../contracting.types').CreateAllocationBatchPayload) =>
+    http<{ batch: import('../contracting.types').AllocationBatch; summary: import('../contracting.types').BatchAllocationSummary }>(
+      `/api/contracting/projects/${projectId}/allocation-batches`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    ),
+
+  // 41. Document Register (سجل المخططات والمستندات)
+  listDocuments: (projectId: string) =>
+    http<import('../contracting.types').ContractingDocument[]>(`/api/contracting/projects/${projectId}/documents`),
+
+  getDocumentDetail: (id: string) =>
+    http<import('../contracting.types').ContractingDocumentDetail>(`/api/contracting/documents/${id}`),
+
+  createDocument: (projectId: string, data: import('../contracting.types').CreateContractingDocumentPayload) =>
+    http<{ document: import('../contracting.types').ContractingDocument; revision: import('../contracting.types').ContractingDocumentRevision }>(
+      `/api/contracting/projects/${projectId}/documents`,
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
+
+  addDocumentRevision: (documentId: string, data: { revCode: string; fileRef?: string; notes?: string }) =>
+    http<import('../contracting.types').ContractingDocumentRevision>(`/api/contracting/documents/${documentId}/revisions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateDocumentRevisionStatus: (
+    revisionId: string,
+    data: { reviewStatus: import('../contracting.types').DocumentReviewStatus; reviewedBy?: string; reviewComments?: string },
+  ) =>
+    http<import('../contracting.types').ContractingDocumentRevision>(`/api/contracting/document-revisions/${revisionId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  distributeDocument: (
+    revisionId: string,
+    data: { recipientName: string; recipientRole?: import('../contracting.types').DocumentRecipientRole; distributionMethod?: import('../contracting.types').DocumentDistributionMethod; notes?: string },
+  ) =>
+    http<import('../contracting.types').ContractingDocumentDistribution>(`/api/contracting/document-revisions/${revisionId}/distribute`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // 42. Meeting Minutes & Action Items (محاضر الاجتماعات وبنود المتابعة)
+  listMeetingMinutes: (projectId: string) =>
+    http<import('../contracting.types').ContractingMeetingMinute[]>(`/api/contracting/projects/${projectId}/meeting-minutes`),
+
+  getMeetingMinuteDetail: (id: string) =>
+    http<import('../contracting.types').ContractingMeetingMinuteDetail>(`/api/contracting/meeting-minutes/${id}`),
+
+  createMeetingMinute: (projectId: string, data: import('../contracting.types').CreateMeetingMinutePayload) =>
+    http<import('../contracting.types').ContractingMeetingMinute>(`/api/contracting/projects/${projectId}/meeting-minutes`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  addMeetingActionItem: (minuteId: string, data: import('../contracting.types').CreateMeetingActionItemPayload) =>
+    http<import('../contracting.types').ContractingMeetingActionItem>(`/api/contracting/meeting-minutes/${minuteId}/action-items`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateMeetingActionItemStatus: (actionItemId: string, status: 'open' | 'closed') =>
+    http<import('../contracting.types').ContractingMeetingActionItem>(`/api/contracting/meeting-action-items/${actionItemId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    }),
+};
+
+
+
+
+

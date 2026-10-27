@@ -1,0 +1,373 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { downloadExcelFile, escapeHtml, printHtmlDocument } from '@/lib/browser';
+import { formatCurrency } from '@/lib/format';
+import { productsApi } from '@/features/products/api/products.api';
+import { catalogApi } from '@/lib/api/catalog';
+import { queryKeys } from '@/app/query-keys';
+import { invalidateCatalogDomain } from '@/app/query-invalidation';
+import { useHasAnyPermission } from '@/shared/hooks/use-permission';
+import type { Product, ProductUnit } from '@/types/domain';
+import { useProductsPageQuery } from '@/features/products/hooks/useProductsPageQuery';
+import { resolveBarcodeUnit, type BarcodePrintItem } from '@/lib/barcode-labels';
+import { toast } from '@/shared/components/system-alert';
+
+export function useProductsWorkspaceController(groupFashion = false) {
+  const [search, setSearch] = useState('');
+  const [viewFilter, setViewFilter] = useState<'all' | 'low' | 'out' | 'offers' | 'special' | 'archived'>('all');
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [productToArchive, setProductToArchive] = useState<Product | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [sortField, setSortField] = useState<string>('');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [offerDialogProduct, setOfferDialogProduct] = useState<Product | null>(null);
+  const [barcodeDialogProduct, setBarcodeDialogProduct] = useState<Product | null>(null);
+  const [barcodeDialogMode, setBarcodeDialogMode] = useState<'scan' | 'generate'>('scan');
+  const [printDialogState, setPrintDialogState] = useState<{
+    product?: Product | null;
+    unit?: ProductUnit | null;
+    items?: BarcodePrintItem[];
+  } | null>(null);
+
+  const productsQuery = useProductsPageQuery({
+    page,
+    pageSize,
+    q: search,
+    view: viewFilter,
+    groupFashion,
+    sortBy: sortField || undefined,
+    sortDir: sortField ? sortDirection : undefined,
+  });
+  const categoriesQuery = useQuery({ queryKey: queryKeys.productsCategories, queryFn: productsApi.categories, staleTime: 60_000 });
+  const suppliersQuery = useQuery({ queryKey: queryKeys.productsSuppliers, queryFn: productsApi.suppliers, staleTime: 60_000 });
+  const customersQuery = useQuery({ queryKey: queryKeys.productsCustomers, queryFn: catalogApi.listCustomers, staleTime: 60_000 });
+  const queryClient = useQueryClient();
+  const canDelete = useHasAnyPermission('canDelete');
+  const canPrint = useHasAnyPermission('canPrint');
+  const canManageSuppliers = useHasAnyPermission('suppliers');
+
+  const deleteMutation = useMutation({
+    mutationFn: (productId: string) => productsApi.remove(productId),
+    onSuccess: async () => {
+      await invalidateCatalogDomain(queryClient, { includeProducts: true });
+      setSelectedProduct(null);
+      setProductToDelete(null);
+    }
+  });
+
+  const toggleArchiveMutation = useMutation({
+    mutationFn: (arg: string | { productId: string; options?: { zeroStock?: boolean; archiveEntireGroup?: boolean } }) => {
+      const productId = typeof arg === 'string' ? arg : arg.productId;
+      const options = typeof arg === 'string' ? undefined : arg.options;
+      return productsApi.toggleArchive(productId, options);
+    },
+    onSuccess: async (data) => {
+      await invalidateCatalogDomain(queryClient, { includeProducts: true });
+      if (selectedProduct && (
+        String(selectedProduct.id) === String(productToArchive?.id || '')
+        || (productToArchive?.itemKind === 'fashion' && productToArchive?.styleCode && selectedProduct.styleCode === productToArchive.styleCode)
+      )) {
+        setSelectedProduct((current) => current ? { ...current, isActive: data.isActive, is_active: data.isActive } : null);
+      }
+      setProductToArchive(null);
+      toast.success(data.message || (data.isActive ? 'تم تنشيط الصنف بنجاح' : 'تم أرشفة وتعطيل الصنف بنجاح'));
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'تعذر تغيير حالة أرشفة الصنف');
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (productIds: string[]) => {
+      const failures: string[] = [];
+      for (const productId of productIds) {
+        try {
+          await productsApi.remove(productId);
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : `تعذر حذف الصنف ${productId}`);
+        }
+      }
+      if (failures.length) throw new Error(failures.join('\n'));
+    },
+    onSuccess: async () => {
+      setSelectedIds([]);
+      setBulkDeleteOpen(false);
+      if (selectedProduct && selectedIds.includes(String(selectedProduct.id))) {
+        setSelectedProduct(null);
+      }
+      await invalidateCatalogDomain(queryClient, { includeProducts: true });
+    }
+  });
+
+  const categoryNames = useMemo(() => Object.fromEntries((categoriesQuery.data || []).map((category) => [category.id, category.name])), [categoriesQuery.data]);
+  const supplierNames = useMemo(() => Object.fromEntries((suppliersQuery.data || []).map((supplier) => [supplier.id, supplier.name])), [suppliersQuery.data]);
+  const visibleProducts = useMemo(() => {
+    return productsQuery.data?.products || [];
+  }, [productsQuery.data?.products]);
+  const summary = productsQuery.data?.summary;
+  const selectedIdsSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const metrics = useMemo(() => ({
+    total: Number(summary?.totalProducts || 0),
+    lowStockCount: Number(summary?.lowStockCount || 0),
+    outOfStockCount: Number(summary?.outOfStockCount || 0),
+  }), [summary?.lowStockCount, summary?.outOfStockCount, summary?.totalProducts]);
+  const inventoryCost = useMemo(() => Number(summary?.inventoryCost || 0), [summary?.inventoryCost]);
+  const inventorySaleValue = useMemo(() => Number(summary?.inventorySaleValue || 0), [summary?.inventorySaleValue]);
+  const activeOffersCount = useMemo(() => Number(summary?.activeOffersCount || 0), [summary?.activeOffersCount]);
+  const customerPriceCount = useMemo(() => Number(summary?.customerPriceCount || 0), [summary?.customerPriceCount]);
+  const selectedProducts = useMemo(
+    () => visibleProducts.filter((product) => selectedIdsSet.has(String(product.id))),
+    [selectedIdsSet, visibleProducts],
+  );
+
+  const handleSortChange = useCallback((field: string) => {
+    setSortField((currentField) => {
+      if (currentField === field) {
+        if (sortDirection === 'asc') {
+          setSortDirection('desc');
+          return field;
+        } else {
+          setSortDirection('asc');
+          return '';
+        }
+      } else {
+        setSortDirection('asc');
+        return field;
+      }
+    });
+    setPage(1);
+  }, [sortDirection]);
+
+  const handleViewFilterChange = useCallback((nextFilter: 'all' | 'low' | 'out' | 'offers' | 'special' | 'archived') => {
+    setViewFilter(nextFilter);
+    setSortField('');
+    setSortDirection('asc');
+    setPage(1);
+  }, []);
+
+  useEffect(() => {
+    if (selectedProduct) {
+      const refreshed = visibleProducts.find((product) => String(product.id) === String(selectedProduct.id));
+      if (refreshed) {
+        setSelectedProduct(refreshed);
+        return;
+      }
+      setSelectedProduct(null);
+    }
+  }, [visibleProducts, selectedProduct]);
+
+  const resetProductsView = useCallback(() => {
+    setSearch('');
+    setViewFilter('all');
+    setSelectedProduct(null);
+    setSelectedIds([]);
+    setSortField('');
+    setSortDirection('asc');
+    setPage(1);
+  }, []);
+
+  const exportProductsCsv = useCallback(() => {
+    downloadExcelFile('products-register.xlsx', ['name', 'itemKind', 'styleCode', 'color', 'size', 'barcode', 'category', 'supplier', 'costPrice', 'retailPrice', 'wholesalePrice', 'stock', 'minStock', 'units', 'offers', 'customerPrices', 'notes'], visibleProducts.map((product) => [
+      product.name,
+      product.itemKind || 'standard',
+      product.styleCode || '',
+      product.color || '',
+      product.size || '',
+      product.barcode,
+      categoryNames[product.categoryId] || '',
+      supplierNames[product.supplierId] || '',
+      product.costPrice,
+      product.retailPrice,
+      product.wholesalePrice,
+      product.stock,
+      product.minStock,
+      (product.units || []).map((unit) => `${unit.name} x ${unit.multiplier}${unit.barcode ? ` [${unit.barcode}]` : ''}`).join(' | '),
+      (product.offers || []).map((offer) => `${offer.type}:${offer.value}:${offer.minQty || 1}:${offer.from || ''}:${offer.to || ''}`).join(' | '),
+      (product.customerPrices || []).map((entry) => `${entry.customerId}:${entry.price}`).join(' | '),
+      product.notes || ''
+    ]));
+  }, [categoryNames, supplierNames, visibleProducts]);
+
+  const copySelectedProductSummary = useCallback(async () => {
+    if (!selectedProduct) return;
+    const summaryText = [
+      `الصنف: ${selectedProduct.name}`,
+      `الباركود: ${selectedProduct.barcode || '-'}`,
+      `نوع الصنف: ${selectedProduct.itemKind === 'fashion' ? 'ملابس' : 'عادي'}`,
+      `كود الموديل: ${selectedProduct.styleCode || '-'}`,
+      `اللون: ${selectedProduct.color || '-'}`,
+      `المقاس: ${selectedProduct.size || '-'}`,
+      `القسم: ${categoryNames[selectedProduct.categoryId] || '-'}`,
+      `المورد: ${supplierNames[selectedProduct.supplierId] || '-'}`,
+      `شراء: ${Number(selectedProduct.costPrice || 0)}`,
+      `قطاعي: ${Number(selectedProduct.retailPrice || 0)}`,
+      `جملة: ${Number(selectedProduct.wholesalePrice || 0)}`,
+      `المخزون: ${Number(selectedProduct.stock || 0)}`,
+      `الحد الأدنى: ${Number(selectedProduct.minStock || 0)}`,
+      `الوحدات: ${(selectedProduct.units || []).map((unit) => `${unit.name} x ${Number(unit.multiplier || 1)}${unit.barcode ? ` [${unit.barcode}]` : ''}`).join(' | ') || '-'}`,
+      `العروض: ${(selectedProduct.offers || []).length}`,
+      `أسعار خاصة: ${(selectedProduct.customerPrices || []).length}`,
+      `ملاحظات: ${selectedProduct.notes || '-'}`
+    ].join('\n');
+    try {
+      await navigator.clipboard?.writeText(summaryText);
+    } catch {}
+  }, [categoryNames, selectedProduct, supplierNames]);
+
+  const printProductsList = useCallback(() => {
+    const html = `
+      <table style="width: 100%; border-collapse: collapse; font-size: 10.5px; margin-top: 2px;">
+        <thead>
+          <tr style="background: #f1f5f9; color: #0f172a;">
+            <th style="width: 24px; text-align: center; padding: 5px 2px;">#</th>
+            <th style="min-width: 130px; text-align: right; padding: 5px 6px;">الصنف</th>
+            <th style="width: 48px; text-align: center; padding: 5px 3px;">المخزون</th>
+            <th style="width: 65px; text-align: center; padding: 5px 4px;">القسم</th>
+            <th style="width: 65px; text-align: center; padding: 5px 4px;">المورد</th>
+            <th style="width: 60px; text-align: center; padding: 5px 4px;">شراء</th>
+            <th style="width: 60px; text-align: center; padding: 5px 4px;">جملة</th>
+            <th style="width: 64px; text-align: center; padding: 5px 4px;">قطاعي</th>
+            <th style="width: 48px; text-align: center; padding: 5px 3px;">الوحدة</th>
+            <th style="width: 82px; text-align: center; padding: 5px 3px;">الباركود</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${visibleProducts.map((product, idx) => {
+            const isLowStock = Number(product.stock || 0) <= Number(product.minStock || 0);
+            return `
+            <tr style="background: ${idx % 2 === 1 ? '#f8fafc' : '#ffffff'};">
+              <td style="text-align: center; color: #64748b; font-weight: 700; padding: 4px 2px;">${idx + 1}</td>
+              <td style="text-align: right; padding: 4px 6px; word-break: break-word; line-height: 1.25;">
+                <span style="font-weight: 800; color: #0f172a; font-size: 11px;">${escapeHtml(product.name)}</span>
+                ${(product.offers || []).length || (product.customerPrices || []).length
+                  ? `<div style="color: #059669; font-size: 9.5px; margin-top: 1px;">عروض: ${(product.offers || []).length} | أسعار خاصة: ${(product.customerPrices || []).length}</div>`
+                  : ''}
+              </td>
+              <td style="text-align: center; font-weight: 800; white-space: nowrap; padding: 4px 3px; color: ${isLowStock ? '#dc2626' : '#0f172a'}; background: ${isLowStock ? '#fef2f2' : 'transparent'};">
+                ${Number(product.stock || 0)}
+              </td>
+              <td style="text-align: center; padding: 4px 4px; color: #334155; font-size: 10px;">${escapeHtml(categoryNames[product.categoryId] || '-')}</td>
+              <td style="text-align: center; padding: 4px 4px; color: #334155; font-size: 10px;">${escapeHtml(supplierNames[product.supplierId] || '-')}</td>
+              <td style="text-align: center; font-family: Arial, sans-serif; font-weight: 700; white-space: nowrap; padding: 4px 4px; font-size: 10.5px;">
+                ${formatCurrency(product.costPrice)}
+              </td>
+              <td style="text-align: center; font-family: Arial, sans-serif; font-weight: 700; white-space: nowrap; padding: 4px 4px; font-size: 10.5px;">
+                ${formatCurrency(product.wholesalePrice)}
+              </td>
+              <td style="text-align: center; font-family: Arial, sans-serif; font-weight: 800; color: #047857; white-space: nowrap; padding: 4px 4px; font-size: 10.5px;">
+                ${formatCurrency(product.retailPrice)}
+              </td>
+              <td style="text-align: center; padding: 4px 3px; font-size: 10px; color: #475569; white-space: nowrap;">
+                ${(product.units || []).map((u) => `${escapeHtml(u.name)}${Number(u.multiplier || 1) > 1 ? ` × ${u.multiplier}` : ''}`).join(', ') || 'قطعة'}
+              </td>
+              <td style="text-align: center; font-family: monospace; font-size: 10px; white-space: nowrap; padding: 4px 3px;">${escapeHtml(product.barcode || '-')}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+    printHtmlDocument('قائمة الأصناف', html, {
+      subtitle: `إجمالي الأصناف: ${visibleProducts.length} صنف`,
+      pageSize: 'A4',
+      orientation: 'portrait',
+    });
+  }, [categoryNames, supplierNames, visibleProducts]);
+
+  const openOfferDialog = useCallback((product: Product) => {
+    setSelectedProduct(product);
+    setOfferDialogProduct(product);
+  }, []);
+
+  const openBarcodeDialog = useCallback((product: Product, mode: 'scan' | 'generate' = 'scan') => {
+    setSelectedProduct(product);
+    setBarcodeDialogProduct(product);
+    setBarcodeDialogMode(mode);
+  }, []);
+
+  const openPrintDialog = useCallback((product: Product, unit?: ProductUnit | null) => {
+    setSelectedProduct(product);
+    setPrintDialogState({ product, unit });
+  }, []);
+
+  const openBulkPrintDialog = useCallback((products: Product[]) => {
+    if (!products.length) return;
+    const items: BarcodePrintItem[] = products.map((p) => ({
+      product: p,
+      unit: resolveBarcodeUnit(p),
+      copies: Math.max(1, Number(p.stock || 1)),
+    }));
+    setPrintDialogState({ items });
+  }, []);
+
+  const applyProductPatch = useCallback((product: Product) => {
+    setSelectedProduct((current) => (current && String(current.id) === String(product.id) ? product : current));
+    setOfferDialogProduct((current) => (current && String(current.id) === String(product.id) ? product : current));
+    setBarcodeDialogProduct((current) => (current && String(current.id) === String(product.id) ? product : current));
+    setPrintDialogState((current) => (current && current.product && String(current.product.id) === String(product.id) ? { ...current, product } : current));
+  }, []);
+
+  return {
+    search,
+    viewFilter,
+    selectedProduct,
+    productToDelete,
+    productToArchive,
+    selectedIds,
+    bulkDeleteOpen,
+    page,
+    pageSize,
+    productsQuery,
+    categoriesQuery,
+    suppliersQuery,
+    customersQuery,
+    canDelete,
+    canPrint,
+    canManageSuppliers,
+    deleteMutation,
+    toggleArchiveMutation,
+    bulkDeleteMutation,
+    categoryNames,
+    supplierNames,
+    visibleProducts,
+    summary,
+    metrics,
+    inventoryCost,
+    inventorySaleValue,
+    activeOffersCount,
+    customerPriceCount,
+    selectedProducts,
+    sortField,
+    sortDirection,
+    handleSortChange,
+    offerDialogProduct,
+    barcodeDialogProduct,
+    barcodeDialogMode,
+    printDialogState,
+    setSearch,
+    setViewFilter: handleViewFilterChange,
+    setSelectedProduct,
+    setProductToDelete,
+    setProductToArchive,
+    setSelectedIds,
+    setBulkDeleteOpen,
+    setPage,
+    setPageSize,
+    setOfferDialogProduct,
+    setBarcodeDialogProduct,
+    setPrintDialogState,
+    queryClient,
+    exportProductsCsv,
+    copySelectedProductSummary,
+    resetProductsView,
+    printProductsList,
+    openOfferDialog,
+    openBarcodeDialog,
+    openPrintDialog,
+    openBulkPrintDialog,
+    applyProductPatch,
+  };
+}

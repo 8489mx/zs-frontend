@@ -1,0 +1,799 @@
+import { CurrencySymbol } from '@/shared/ui/currency-symbol';
+import { getGlobalCurrencySymbol } from '@/lib/currencies';
+import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts';
+import { formatCurrency } from '@/lib/format';
+import { useAuthStore } from '@/stores/auth-store';
+import type { DashboardTrendPoint } from '@/features/dashboard/api/dashboard.types';
+
+interface DashboardExecutiveHeroProps {
+  salesTrend?: DashboardTrendPoint[];
+  purchasesTrend?: DashboardTrendPoint[];
+  todaySalesAmount: number;
+  todaySalesCount: number;
+  treasuryNet: number;
+  totalStockAlerts: number;
+}
+
+const THEME_STORAGE_KEY = 'dashboard_hero_card_theme';
+
+function getInitialTheme(): 'dark' | 'light' {
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch {}
+  }
+  return 'light';
+}
+
+export function DashboardExecutiveHero({
+  salesTrend = [],
+  purchasesTrend = [],
+  todaySalesAmount,
+  todaySalesCount,
+  treasuryNet,
+  totalStockAlerts,
+}: DashboardExecutiveHeroProps) {
+  const { t: __t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isEn = i18n.language !== 'ar';
+
+  const [activeMetric, setActiveMetric] = useState<'sales' | 'both'>('both');
+  const [timeframe, setTimeframe] = useState<'7d' | '30d'>('7d');
+  const [themeMode, setThemeMode] = useState<'dark' | 'light'>(getInitialTheme);
+  const [activeKpi, setActiveKpi] = useState<'sales' | 'invoices' | 'treasury' | 'alerts' | null>(null);
+
+  const user = useAuthStore((state) => state.user);
+
+  const toggleKpi = (key: 'sales' | 'invoices' | 'treasury' | 'alerts') => {
+    setActiveKpi((prev) => (prev === key ? null : key));
+  };
+
+  const handleToggleTheme = () => {
+    setThemeMode((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(THEME_STORAGE_KEY, next);
+        } catch {}
+      }
+      return next;
+    });
+  };
+  
+  // Format username gracefully: replace system placeholders like Bootstrap Administrator with localized title
+  const formattedUserName = useMemo(() => {
+    const raw = user?.displayName?.trim() || user?.username?.trim() || '';
+    if (!raw) return isEn ? 'System Administrator' : 'مدير النظام';
+    const lower = raw.toLowerCase();
+    if (lower.includes('bootstrap') || lower === 'admin' || lower === 'administrator' || lower === 'root') {
+      return isEn ? 'System Administrator' : 'مدير النظام';
+    }
+    return raw;
+  }, [user, isEn]);
+
+  const userGreetingPart = formattedUserName ? (isEn ? `, ${formattedUserName}` : ` يا ${formattedUserName}`) : '';
+
+  // Compute time-based greeting
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) {
+      return {
+        text: isEn ? `${t('dashboard.greeting_morning', 'Good morning')}${userGreetingPart}` : `صباح الرزق والبركة${userGreetingPart}`,
+        sub: isEn ? t('dashboard.sub_morning', 'Wishing you a productive and profitable day') : 'يوم موفق وتجارة رابحة',
+      };
+    }
+    if (hour >= 12 && hour < 17) {
+      return {
+        text: isEn ? `${t('dashboard.greeting_afternoon', 'Good afternoon')}${userGreetingPart}` : `طاب يومك ورزقك${userGreetingPart}`,
+        sub: isEn ? t('dashboard.sub_afternoon', 'Live sales & activity tracking') : 'متابعة حية للمبيعات',
+      };
+    }
+    return {
+      text: isEn ? `${t('dashboard.greeting_evening', 'Good evening')}${userGreetingPart}` : `مساء الخير والخيرات${userGreetingPart}`,
+      sub: isEn ? t('dashboard.sub_evening', "Today's profit and business activity summary") : 'ملخص أرباح ونشاط اليوم',
+    };
+  }, [userGreetingPart, isEn, t]);
+
+  // Formatted date (concise: day & month)
+  const todayFormatted = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat(isEn ? 'en-US' : 'ar-EG', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      }).format(new Date());
+    } catch {
+      return new Date().toLocaleDateString(isEn ? 'en-US' : 'ar-EG');
+    }
+  }, [isEn]);
+
+  // Prepare chart data (7 points or 30 points)
+  const chartData = useMemo(() => {
+    const pointsCount = Math.max(salesTrend.length, purchasesTrend.length);
+    const shortDays = isEn
+      ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      : ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
+
+    if (!pointsCount) {
+      const dummyCount = timeframe === '7d' ? 7 : 30;
+      const dummy = [];
+      for (let i = 0; i < dummyCount; i++) {
+        dummy.push({
+          label: timeframe === '7d' ? shortDays[i % 7] : `${i + 1}`,
+          fullDate: isEn ? `Day ${i + 1}` : `يوم ${i + 1}`,
+          sales: i === dummyCount - 1 ? (todaySalesAmount || 0) : 0,
+          purchases: 0,
+        });
+      }
+      return dummy;
+    }
+
+    const result = [];
+    for (let i = 0; i < pointsCount; i++) {
+      const s = salesTrend[i];
+      const p = purchasesTrend[i];
+      const rawKey = s?.key || p?.key || (isEn ? `Day ${i + 1}` : `يوم ${i + 1}`);
+      
+      let label = rawKey;
+      let fullDate = rawKey;
+      try {
+        if (rawKey.includes('-')) {
+          const d = new Date(rawKey);
+          if (timeframe === '7d') {
+            label = shortDays[d.getDay()];
+          } else {
+            label = `${d.getDate()}`;
+          }
+          fullDate = new Intl.DateTimeFormat(isEn ? 'en-US' : 'ar-EG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d);
+        }
+      } catch {
+        label = rawKey;
+        fullDate = rawKey;
+      }
+
+      result.push({
+        label,
+        fullDate,
+        sales: Number(s?.value || 0),
+        purchases: Number(p?.value || 0),
+      });
+    }
+
+    return timeframe === '7d' ? result.slice(-7) : result.slice(-30);
+  }, [salesTrend, purchasesTrend, todaySalesAmount, timeframe]);
+
+  const isDark = themeMode === 'dark';
+
+  return (
+    <section
+      className={`dashboard-executive-hero ${isDark ? 'theme-dark' : 'theme-light'}`}
+      style={{
+        background: isDark
+          ? 'linear-gradient(135deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)'
+          : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 60%, #eff6ff 100%)',
+        borderRadius: '16px',
+        padding: '24px 28px',
+        color: isDark ? '#ffffff' : '#0f172a',
+        boxShadow: isDark
+          ? '0 15px 35px -5px rgba(15, 23, 42, 0.45), 0 10px 15px -5px rgba(15, 23, 42, 0.3)'
+          : '0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04)',
+        marginBottom: '20px',
+        position: 'relative',
+        overflow: 'hidden',
+        border: isDark ? '1px solid rgba(255, 255, 255, 0.14)' : '1px solid #e2e8f0',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
+      aria-label={__t('dashboard.dashboard_executive_hero.s0', "الموجز التنفيذي التفاعلي")}
+    >
+      {/* High-Tech Subtle Dot Grid for Depth */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: isDark
+            ? 'radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px)'
+            : 'radial-gradient(rgba(15, 23, 42, 0.045) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Ambient background glows */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '-60px',
+          left: '-40px',
+          width: '340px',
+          height: '340px',
+          background: isDark
+            ? 'radial-gradient(circle, rgba(56, 189, 248, 0.22) 0%, rgba(56, 189, 248, 0) 70%)'
+            : 'radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, rgba(59, 130, 246, 0) 70%)',
+          borderRadius: '50%',
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '-60px',
+          right: '-40px',
+          width: '300px',
+          height: '300px',
+          background: isDark
+            ? 'radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, rgba(168, 85, 247, 0) 70%)'
+            : 'radial-gradient(circle, rgba(99, 102, 241, 0.06) 0%, rgba(99, 102, 241, 0) 70%)',
+          borderRadius: '50%',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Top Header: Greeting, Live Status, Theme Switcher & KPI Badges */}
+      <div
+        className="dashboard-hero-top-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '14px',
+          marginBottom: '16px',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        <div className="dashboard-hero-greeting-box" style={{ flex: '1 1 240px', minWidth: 0, width: '100%' }}>
+          <div
+            className="dashboard-hero-greeting-row"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              marginBottom: '4px',
+              width: '100%',
+            }}
+          >
+            <h1
+              className="dashboard-hero-title"
+              style={{
+                fontSize: '1.25rem',
+                fontWeight: 800,
+                margin: 0,
+                letterSpacing: '-0.02em',
+                color: isDark ? '#ffffff' : '#0f172a',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {greeting.text}
+            </h1>
+
+            {/* Theme Toggle Button - Sleek Icon Only */}
+            <button
+              type="button"
+              className="dashboard-hero-theme-toggle"
+              onClick={handleToggleTheme}
+              title={isDark ? (isEn ? 'Switch to Light Mode' : __t('dashboard.dashboard_executive_hero.s1', "التبديل إلى المظهر الفاتح")) : (isEn ? 'Switch to Dark Mode' : __t('dashboard.dashboard_executive_hero.s2', "التبديل إلى المظهر الليلي"))}
+              aria-label={isDark ? (isEn ? 'Switch to Light Mode' : __t('dashboard.dashboard_executive_hero.s3', "التبديل إلى المظهر الفاتح")) : (isEn ? 'Switch to Dark Mode' : __t('dashboard.dashboard_executive_hero.s4', "التبديل إلى المظهر الليلي"))}
+              style={{
+                background: isDark ? 'rgba(255, 255, 255, 0.08)' : '#ffffff',
+                border: isDark ? '1px solid rgba(255, 255, 255, 0.16)' : '1px solid #cbd5e1',
+                color: isDark ? '#f59e0b' : '#475569',
+                width: '28px',
+                height: '28px',
+                minWidth: '28px',
+                minHeight: '28px',
+                maxWidth: '28px',
+                maxHeight: '28px',
+                aspectRatio: '1 / 1',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.2s ease',
+                padding: 0,
+                flexShrink: 0,
+                boxSizing: 'border-box',
+              }}
+            >
+              {isDark ? (
+                // Sun Icon for Dark Mode (switch to light)
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="4" fill="#fbbf24" fillOpacity="0.25" />
+                  <line x1="12" y1="2" x2="12" y2="4" />
+                  <line x1="12" y1="20" x2="12" y2="22" />
+                  <line x1="4.93" y1="4.93" x2="6.34" y2="6.34" />
+                  <line x1="17.66" y1="17.66" x2="19.07" y2="19.07" />
+                  <line x1="2" y1="12" x2="4" y2="12" />
+                  <line x1="20" y1="12" x2="22" y2="12" />
+                  <line x1="4.93" y1="19.07" x2="6.34" y2="17.66" />
+                  <line x1="17.66" y1="6.34" x2="19.07" y2="4.93" />
+                </svg>
+              ) : (
+                // Moon Icon for Light Mode (switch to dark)
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="#475569" fillOpacity="0.15" />
+                </svg>
+              )}
+            </button>
+          </div>
+          
+          <p
+            className="dashboard-hero-subtitle"
+            style={{
+              margin: 0,
+              fontSize: '0.82rem',
+              color: isDark ? '#94a3b8' : '#64748b',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {greeting.sub} · <strong style={{ color: isDark ? '#e2e8f0' : '#0f172a' }}>{todayFormatted}</strong>
+          </p>
+        </div>
+
+        {/* 4 Unified, Calming, Glassmorphic KPI Cards */}
+        <div className="dashboard-hero-kpi-grid" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Card 1: Sales */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => toggleKpi('sales')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleKpi('sales'); }}
+            className={`dashboard-hero-kpi-card ${activeKpi === 'sales' ? 'is-expanded' : ''}`.trim()}
+            title={t('dashboard.click_to_expand', 'انقر للتكبير والتفاصيل')}
+            style={{
+              background: isDark ? 'rgba(255, 255, 255, 0.05)' : '#ffffff',
+              border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid #cbd5e1',
+              backdropFilter: 'blur(12px)',
+              padding: '8px 14px',
+              borderRadius: '10px',
+              textAlign: 'center',
+              minWidth: '110px',
+              boxShadow: isDark
+                ? '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08)'
+                : '0 2px 6px -1px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div className="dashboard-hero-kpi-title" style={{ fontSize: '0.73rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600, marginBottom: '3px' }}>
+              {t('dashboard.today_sales', 'مبيعات اليوم')}
+            </div>
+            <div className="dashboard-hero-kpi-value-row" style={{ display: 'inline-flex', alignItems: 'baseline', gap: '4px', justifyContent: 'center' }}>
+              <strong className="dashboard-hero-kpi-value" style={{ fontSize: '1.05rem', color: isDark ? '#ffffff' : '#0f172a', fontWeight: 800 }}>
+                {formatCurrency(todaySalesAmount)}
+              </strong>
+              <span className="dashboard-hero-kpi-unit" style={{ fontSize: '0.68rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600 }}><CurrencySymbol /></span>
+            </div>
+          </div>
+
+          {/* Card 2: Invoices */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => toggleKpi('invoices')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleKpi('invoices'); }}
+            className={`dashboard-hero-kpi-card ${activeKpi === 'invoices' ? 'is-expanded' : ''}`.trim()}
+            title={t('dashboard.click_to_expand', 'انقر للتكبير والتفاصيل')}
+            style={{
+              background: isDark ? 'rgba(255, 255, 255, 0.05)' : '#ffffff',
+              border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid #cbd5e1',
+              backdropFilter: 'blur(12px)',
+              padding: '8px 14px',
+              borderRadius: '10px',
+              textAlign: 'center',
+              minWidth: '95px',
+              boxShadow: isDark
+                ? '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08)'
+                : '0 2px 6px -1px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div className="dashboard-hero-kpi-title" style={{ fontSize: '0.73rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600, marginBottom: '3px' }}>
+              {t('dashboard.today_invoices', 'فواتير اليوم')}
+            </div>
+            <div className="dashboard-hero-kpi-value-row" style={{ display: 'inline-flex', alignItems: 'baseline', gap: '4px', justifyContent: 'center' }}>
+              <strong className="dashboard-hero-kpi-value" style={{ fontSize: '1.05rem', color: isDark ? '#ffffff' : '#0f172a', fontWeight: 800 }}>
+                {todaySalesCount}
+              </strong>
+              <span className="dashboard-hero-kpi-unit" style={{ fontSize: '0.68rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600 }}>{t('dashboard.invoices_unit', 'فاتورة')}</span>
+            </div>
+          </div>
+
+          {/* Card 3: Treasury */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => toggleKpi('treasury')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleKpi('treasury'); }}
+            className={`dashboard-hero-kpi-card ${activeKpi === 'treasury' ? 'is-expanded' : ''}`.trim()}
+            title={t('dashboard.click_to_expand', 'انقر للتكبير والتفاصيل')}
+            style={{
+              background: isDark ? 'rgba(255, 255, 255, 0.05)' : '#ffffff',
+              border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid #cbd5e1',
+              backdropFilter: 'blur(12px)',
+              padding: '8px 14px',
+              borderRadius: '10px',
+              textAlign: 'center',
+              minWidth: '115px',
+              boxShadow: isDark
+                ? '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08)'
+                : '0 2px 6px -1px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div className="dashboard-hero-kpi-title" style={{ fontSize: '0.73rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600, marginBottom: '3px' }}>
+              {t('dashboard.net_treasury', 'صافي الخزينة')}
+            </div>
+            <div className="dashboard-hero-kpi-value-row" style={{ display: 'inline-flex', alignItems: 'baseline', gap: '2px', justifyContent: 'center' }}>
+              <strong
+                className="dashboard-hero-kpi-value"
+                style={{
+                  fontSize: '1.05rem',
+                  color: isDark
+                    ? (treasuryNet < 0 ? '#f87171' : '#ffffff')
+                    : (treasuryNet < 0 ? '#dc2626' : '#0f172a'),
+                  fontWeight: 800,
+                  lineHeight: 1,
+                }}
+              >
+                {treasuryNet < 0 ? `-${formatCurrency(Math.abs(treasuryNet))}` : formatCurrency(treasuryNet)}
+              </strong>
+              <span className="dashboard-hero-kpi-unit" style={{ fontSize: '0.68rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600 }}><CurrencySymbol /></span>
+            </div>
+          </div>
+
+          {/* Card 4: Inventory Alerts */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => toggleKpi('alerts')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleKpi('alerts'); }}
+            className={`dashboard-hero-kpi-card ${activeKpi === 'alerts' ? 'is-expanded' : ''}`.trim()}
+            title={t('dashboard.click_to_expand', 'انقر للتكبير والتفاصيل')}
+            style={{
+              background: isDark ? 'rgba(255, 255, 255, 0.05)' : '#ffffff',
+              border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid #cbd5e1',
+              backdropFilter: 'blur(12px)',
+              padding: '8px 14px',
+              borderRadius: '10px',
+              textAlign: 'center',
+              minWidth: '105px',
+              boxShadow: isDark
+                ? '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.08)'
+                : '0 2px 6px -1px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div className="dashboard-hero-kpi-title" style={{ fontSize: '0.73rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600, marginBottom: '3px' }}>
+              {t('dashboard.stock_alerts', 'تنبيهات المخزون')}
+            </div>
+            {totalStockAlerts > 0 ? (
+              <div className="dashboard-hero-kpi-value-row" style={{ display: 'inline-flex', alignItems: 'baseline', gap: '4px', justifyContent: 'center' }}>
+                <strong className="dashboard-hero-kpi-value" style={{ fontSize: '1.05rem', color: isDark ? '#fb7185' : '#e11d48', fontWeight: 800 }}>
+                  {totalStockAlerts}
+                </strong>
+                <span className="dashboard-hero-kpi-unit" style={{ fontSize: '0.68rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600 }}>{t('dashboard.items_unit', 'صنف')}</span>
+              </div>
+            ) : (
+              <strong className="dashboard-hero-kpi-value" style={{ fontSize: '0.92rem', color: isDark ? '#4ade80' : '#16a34a', fontWeight: 700 }}>
+                {t('dashboard.stable', 'مستقر')}
+              </strong>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Chart Section Header: Title + Timeframe Switcher & Mode Toggle */}
+      <div
+        className="dashboard-hero-chart-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '10px',
+          borderTop: isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid #e2e8f0',
+          paddingTop: '14px',
+          marginBottom: '10px',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
+        <span
+          className="dashboard-hero-chart-title"
+          style={{ fontSize: '0.88rem', fontWeight: 700, color: isDark ? '#f8fafc' : '#1e293b' }}
+        >
+          {t('dashboard.sales_trend_title', 'حركة المبيعات وتدفق النشاط')}
+        </span>
+
+        <div className="dashboard-hero-chart-controls" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Timeframe Pill Switcher */}
+          <div
+            className="dashboard-hero-pill-group timeframe-pill-group"
+            style={{
+              background: isDark ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9',
+              padding: '3px',
+              borderRadius: '8px',
+              display: 'inline-flex',
+              gap: '3px',
+              border: isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid #e2e8f0',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setTimeframe('7d')}
+              style={{
+                background: timeframe === '7d'
+                  ? (isDark ? '#0284c7' : '#ffffff')
+                  : 'transparent',
+                color: timeframe === '7d'
+                  ? (isDark ? '#ffffff' : '#0f172a')
+                  : (isDark ? '#94a3b8' : '#64748b'),
+                boxShadow: timeframe === '7d'
+                  ? (isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.08)')
+                  : 'none',
+                border: timeframe === '7d' && !isDark ? '1px solid #cbd5e1' : 'none',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                lineHeight: 1.2,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {t('dashboard.timeframe_7d', '٧ أيام')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTimeframe('30d')}
+              style={{
+                background: timeframe === '30d'
+                  ? (isDark ? '#0284c7' : '#ffffff')
+                  : 'transparent',
+                color: timeframe === '30d'
+                  ? (isDark ? '#ffffff' : '#0f172a')
+                  : (isDark ? '#94a3b8' : '#64748b'),
+                boxShadow: timeframe === '30d'
+                  ? (isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.08)')
+                  : 'none',
+                border: timeframe === '30d' && !isDark ? '1px solid #cbd5e1' : 'none',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                lineHeight: 1.2,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {t('dashboard.timeframe_30d', '٣٠ يوم')}
+            </button>
+          </div>
+
+          {/* Metric Mode Filter */}
+          <div
+            className="dashboard-hero-pill-group metric-pill-group"
+            style={{
+              background: isDark ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9',
+              padding: '3px',
+              borderRadius: '8px',
+              display: 'inline-flex',
+              gap: '3px',
+              border: isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid #e2e8f0',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setActiveMetric('sales')}
+              style={{
+                background: activeMetric === 'sales'
+                  ? (isDark ? '#0284c7' : '#ffffff')
+                  : 'transparent',
+                color: activeMetric === 'sales'
+                  ? (isDark ? '#ffffff' : '#0f172a')
+                  : (isDark ? '#94a3b8' : '#64748b'),
+                boxShadow: activeMetric === 'sales'
+                  ? (isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.08)')
+                  : 'none',
+                border: activeMetric === 'sales' && !isDark ? '1px solid #cbd5e1' : 'none',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                lineHeight: 1.2,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {t('dashboard.sales', 'المبيعات')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMetric('both')}
+              style={{
+                background: activeMetric === 'both'
+                  ? (isDark ? '#0284c7' : '#ffffff')
+                  : 'transparent',
+                color: activeMetric === 'both'
+                  ? (isDark ? '#ffffff' : '#0f172a')
+                  : (isDark ? '#94a3b8' : '#64748b'),
+                boxShadow: activeMetric === 'both'
+                  ? (isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.08)')
+                  : 'none',
+                border: activeMetric === 'both' && !isDark ? '1px solid #cbd5e1' : 'none',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                lineHeight: 1.2,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {t('dashboard.comparison', 'مقارنة')}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Large Glowing Animated Wave Area Chart with Highlighted Peak Point */}
+      <div style={{ width: '100%', height: 225, position: 'relative', zIndex: 1, paddingBottom: '6px' }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData} margin={{ top: 14, right: 12, left: 12, bottom: 12 }}>
+            <defs>
+              <linearGradient id="chartSalesGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={isDark ? '#38bdf8' : '#2563eb'} stopOpacity={isDark ? 0.45 : 0.25} />
+                <stop offset="95%" stopColor={isDark ? '#38bdf8' : '#2563eb'} stopOpacity={0.0} />
+              </linearGradient>
+              <linearGradient id="chartPurchasesGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={isDark ? '#c084fc' : '#7c3aed'} stopOpacity={isDark ? 0.4 : 0.2} />
+                <stop offset="95%" stopColor={isDark ? '#c084fc' : '#7c3aed'} stopOpacity={0.0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke={isDark ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9'}
+              vertical={false}
+            />
+            <XAxis
+              dataKey="label"
+              stroke={isDark ? 'rgba(255, 255, 255, 0.16)' : '#cbd5e1'}
+              tick={{ fill: isDark ? '#94a3b8' : '#64748b', fontSize: 11, fontWeight: 700 }}
+              tickLine={false}
+              dy={6}
+              minTickGap={timeframe === '30d' ? 14 : 4}
+              interval={timeframe === '30d' ? 'preserveStartEnd' : 0}
+              axisLine={{ stroke: isDark ? 'rgba(255, 255, 255, 0.12)' : '#e2e8f0' }}
+            />
+            <YAxis hide domain={[0, (dataMax: number) => Math.max(Math.ceil(dataMax * 1.2), 100)]} />
+            <Tooltip
+              content={({ active, payload, label }) => {
+                if (active && payload && payload.length) {
+                  const fullDate = payload[0]?.payload?.fullDate || label;
+                  return (
+                    <div
+                      style={{
+                        background: isDark ? 'rgba(15, 23, 42, 0.95)' : '#ffffff',
+                        backdropFilter: isDark ? 'blur(12px)' : 'none',
+                        border: isDark ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid #e2e8f0',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        color: isDark ? '#fff' : '#0f172a',
+                        boxShadow: isDark ? '0 10px 25px rgba(0,0,0,0.5)' : '0 6px 16px rgba(0,0,0,0.08)',
+                        direction: isEn ? 'ltr' : 'rtl',
+                        minWidth: '150px',
+                      }}
+                    >
+                      <div style={{ fontSize: '0.78rem', color: isDark ? '#94a3b8' : '#64748b', marginBottom: '6px', fontWeight: 600 }}>{fullDate}</div>
+                      {payload.map((entry) => (
+                        <div
+                          key={entry.name}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: '12px',
+                            fontSize: '0.84rem',
+                            color: entry.name === 'sales'
+                              ? (isDark ? '#38bdf8' : '#2563eb')
+                              : (isDark ? '#c084fc' : '#7c3aed'),
+                            fontWeight: 800,
+                            marginBottom: '2px',
+                          }}
+                        >
+                          <span>{entry.name === 'sales' ? (isEn ? `${t('dashboard.sales', 'المبيعات')}:` : __t('dashboard.dashboard_executive_hero.s5', "المبيعات:")) : (isEn ? `${t('dashboard.purchases', 'المشتريات')}:` : __t('dashboard.dashboard_executive_hero.s6', "المشتريات:"))}</span>
+                          <span dir="ltr">{formatCurrency(Number(entry.value || 0))} {getGlobalCurrencySymbol()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+            <Area
+              type="monotone"
+              dataKey="sales"
+              name="sales"
+              stroke={isDark ? '#38bdf8' : '#2563eb'}
+              strokeWidth={3}
+              fillOpacity={1}
+              fill="url(#chartSalesGrad)"
+              isAnimationActive={true}
+              animationDuration={950}
+              animationEasing="ease-out"
+              dot={(props: any) => {
+                const { cx, cy, index, value } = props;
+                // Highlight the last / current day point
+                if (index === chartData.length - 1 && cx != null && cy != null) {
+                  return (
+                    <g key="active-peak-dot">
+                      <circle cx={cx} cy={cy} r={8} fill={isDark ? 'rgba(56, 189, 248, 0.35)' : 'rgba(37, 99, 235, 0.25)'} />
+                      <circle cx={cx} cy={cy} r={4.5} fill={isDark ? '#38bdf8' : '#2563eb'} stroke="#ffffff" strokeWidth={2} />
+                    </g>
+                  );
+                }
+                if (value > 0 && cx != null && cy != null) {
+                  return <circle key={`dot-${index ?? 0}`} cx={cx} cy={cy} r={3} fill={isDark ? '#38bdf8' : '#2563eb'} opacity={0.6} />;
+                }
+                return <g key={`dot-empty-${index ?? 0}`} />;
+              }}
+            />
+            {activeMetric === 'both' && (
+              <Area
+                type="monotone"
+                dataKey="purchases"
+                name="purchases"
+                stroke={isDark ? '#c084fc' : '#7c3aed'}
+                strokeWidth={2.5}
+                strokeDasharray="4 4"
+                fillOpacity={1}
+                fill="url(#chartPurchasesGrad)"
+                isAnimationActive={true}
+                animationDuration={950}
+                animationEasing="ease-out"
+                dot={(props: any) => {
+                  const { cx, cy, index, value } = props;
+                  if (value > 0 && cx != null && cy != null) {
+                    return <circle key={`purch-dot-${index ?? 0}`} cx={cx} cy={cy} r={3} fill={isDark ? '#c084fc' : '#7c3aed'} opacity={0.6} />;
+                  }
+                  return <g key={`purch-dot-empty-${index ?? 0}`} />;
+                }}
+              />
+            )}
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </section>
+  );
+}
+

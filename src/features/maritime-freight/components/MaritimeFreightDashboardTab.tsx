@@ -1,0 +1,706 @@
+import { useTranslation } from 'react-i18next';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AppIcons } from '@/shared/components/icons/AppIcons';
+import { useSystemCurrency } from '@/shared/hooks/use-system-currency';
+import { maritimeApi, MaritimeJob, MaritimeContainer } from '../api/maritime-freight.api';
+import { useMaritime } from '../context/MaritimeContext';
+
+export function MaritimeFreightDashboard() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { counts, setIsCreateInquiryOpen, setIsCreateRfqOpen } = useMaritime();
+  const { currencySymbol } = useSystemCurrency();
+
+  const [jobs, setJobs] = useState<MaritimeJob[]>([]);
+  const [containers, setContainers] = useState<MaritimeContainer[]>([]);
+  const [, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const [jobsRes, containersRes] = await Promise.all([
+          maritimeApi.getJobs().catch(() => []),
+          maritimeApi.getContainers().catch(() => []),
+        ]);
+        if (isMounted) {
+          setJobs(jobsRes || []);
+          setContainers(containersRes || []);
+        }
+      } catch (err) {
+        console.error('Failed to load maritime dashboard metrics:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void fetchDashboardData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Financial aggregates
+  const financialMetrics = useMemo(() => {
+    let totalRevenue = 0;
+    let totalCarrierCost = 0;
+    let totalOtherCosts = 0;
+
+    for (const job of jobs) {
+      totalRevenue += Number(job.client_invoiced_total || 0);
+      totalCarrierCost += Number(job.carrier_cost_total || 0);
+      totalOtherCosts += Number(job.other_costs_total || 0);
+    }
+
+    const totalCosts = totalCarrierCost + totalOtherCosts;
+    const netProfit = totalRevenue - totalCosts;
+    const marginPct = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : '0.0';
+
+    return {
+      totalRevenue,
+      totalCarrierCost,
+      totalCosts,
+      netProfit,
+      marginPct,
+    };
+  }, [jobs]);
+
+  // Multimodal Distribution
+  const modeMetrics = useMemo(() => {
+    let seaCount = 0;
+    let airCount = 0;
+    let roadCount = 0;
+
+    for (const job of jobs) {
+      const mode = job.transport_mode || 'sea';
+      if (mode === 'air') airCount++;
+      else if (mode === 'road') roadCount++;
+      else seaCount++;
+    }
+
+    const total = jobs.length || 1;
+    return {
+      seaCount,
+      airCount,
+      roadCount,
+      seaPct: Math.round((seaCount / total) * 100),
+      airPct: Math.round((airCount / total) * 100),
+      roadPct: Math.round((roadCount / total) * 100),
+    };
+  }, [jobs]);
+
+  // Containers & Demurrage Metrics
+  const containerMetrics = useMemo(() => {
+    let totalTeu = 0;
+    let overdueCount = 0;
+    let criticalCount = 0;
+    let returnedCount = 0;
+
+    for (const c of containers) {
+      if (c.container_type?.includes('40')) {
+        totalTeu += 2;
+      } else {
+        totalTeu += 1;
+      }
+
+      if (c.empty_returned_at) {
+        returnedCount++;
+      } else if (c.is_overdue || (c.daysRemaining !== null && c.daysRemaining !== undefined && c.daysRemaining < 0)) {
+        overdueCount++;
+      } else if (c.daysRemaining !== null && c.daysRemaining !== undefined && c.daysRemaining <= 3) {
+        criticalCount++;
+      }
+    }
+
+    return {
+      totalContainers: containers.length,
+      totalTeu,
+      overdueCount,
+      criticalCount,
+      returnedCount,
+    };
+  }, [containers]);
+
+  // Top Shipping Lines / Carriers
+  const topCarriers = useMemo(() => {
+    const carrierMap = new Map<string, { count: number; spend: number }>();
+
+    for (const job of jobs) {
+      const name = job.shipping_line_name || 'غير محدد';
+      const existing = carrierMap.get(name) || { count: 0, spend: 0 };
+      existing.count += 1;
+      existing.spend += Number(job.carrier_cost_total || 0);
+      carrierMap.set(name, existing);
+    }
+
+    return Array.from(carrierMap.entries())
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 5);
+  }, [jobs]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }} dir="rtl">
+      {/* 1. بطاقات المؤشرات المالية والتشغيلية الرئيسية (Executive KPI Grid - 5 Cards Single Row) */}
+      <style>{`
+        .maritime-dashboard-kpis {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        @media (max-width: 960px) {
+          .maritime-dashboard-kpis {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (max-width: 600px) {
+          .maritime-dashboard-kpis {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+      <div className="maritime-dashboard-kpis">
+        {/* Card 1: الإيرادات المفوترة */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            minHeight: '88px',
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            minWidth: 0,
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '0.76rem', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s0', "إيرادات الشحن واللوجستيات")}
+            </div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', marginTop: '3px', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+              {currencySymbol} {financialMetrics.totalRevenue.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s1', "مفوترة من")} {jobs.length} {t('maritime_freight.maritime_freight_dashboard_tab.s2', "أمر تشغيل")}
+            </div>
+          </div>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: '#eff6ff',
+              border: '1px solid #dbeafe',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#1e40af',
+              flexShrink: 0,
+            }}
+          >
+            <AppIcons.TrendingUp size={18} />
+          </div>
+        </div>
+
+        {/* Card 2: تكاليف النواقل والموانئ */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            minHeight: '88px',
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            minWidth: 0,
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '0.76rem', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s3', "تكلفة النواقل المباشرة")}
+            </div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', marginTop: '3px', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+              {currencySymbol} {financialMetrics.totalCarrierCost.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s4', "نولون الخطوط ومصروفات الموانئ")}
+            </div>
+          </div>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#475569',
+              flexShrink: 0,
+            }}
+          >
+            <AppIcons.CreditCard size={18} />
+          </div>
+        </div>
+
+        {/* Card 3: صافي الربح التشغيلي */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            minHeight: '88px',
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            minWidth: 0,
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s5', "صافي الأرباح")}</span>
+              <span style={{ padding: '1px 5px', background: '#dcfce7', color: '#15803d', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 700, flexShrink: 0 }}>
+                {financialMetrics.marginPct}%
+              </span>
+            </div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', marginTop: '3px', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+              {currencySymbol} {financialMetrics.netProfit.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s6', "المساهمة الصافية للعمليات")}
+            </div>
+          </div>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: '#f0fdf4',
+              border: '1px solid #dcfce7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#15803d',
+              flexShrink: 0,
+            }}
+          >
+            <AppIcons.Coins size={18} />
+          </div>
+        </div>
+
+        {/* Card 4: حركة الحاويات ورادار الموانئ */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            minHeight: '88px',
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
+            minWidth: 0,
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {t('maritime_freight.maritime_freight_dashboard_tab.s7', "حركة الحاويات والرادار")}
+              </span>
+              {containerMetrics.overdueCount > 0 ? (
+                <span style={{ padding: '1px 5px', background: '#fee2e2', color: '#b91c1c', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 700, flexShrink: 0 }}>
+                  {containerMetrics.overdueCount} {t('maritime_freight.maritime_freight_dashboard_tab.s8', "تحت الغرامة")}
+                </span>
+              ) : (
+                <span style={{ padding: '1px 5px', background: '#eff6ff', color: '#1e40af', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 700, flexShrink: 0 }}>
+                  {t('maritime_freight.maritime_freight_dashboard_tab.s9', "منضبط")}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#0f172a', marginTop: '3px', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+              {containerMetrics.totalTeu} <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>TEU</span>
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s10', "إجمالي")} {containerMetrics.totalContainers} {t('maritime_freight.maritime_freight_dashboard_tab.s11', "حاوية |")} {containerMetrics.overdueCount + containerMetrics.criticalCount} {t('maritime_freight.maritime_freight_dashboard_tab.s12', "حرجة")}
+            </div>
+          </div>
+          <div
+            style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              background: containerMetrics.overdueCount > 0 ? '#fef2f2' : '#eff6ff',
+              border: containerMetrics.overdueCount > 0 ? '1px solid #fecaca' : '1px solid #dbeafe',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: containerMetrics.overdueCount > 0 ? '#dc2626' : '#0284c7',
+              flexShrink: 0,
+            }}
+          >
+            {containerMetrics.overdueCount > 0 ? (
+              <AppIcons.AlertTriangle size={18} />
+            ) : (
+              <AppIcons.Container size={18} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. الشبكة التحليلية المتوازنة (Symmetrical 2x2 Clean White Grid) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
+          gap: '14px',
+        }}
+      >
+        {/* Card A: توزيع وسائط الشحن واللوجستيات (Multimodal Breakdown) */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
+                {t('maritime_freight.maritime_freight_dashboard_tab.s13', "توزيع وسائط الشحن (Multimodal Transport Share)")}
+              </h3>
+              <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
+                {t('maritime_freight.maritime_freight_dashboard_tab.s14', "مقارنة حجم العمليات بحسب نمط النقل (بحري / جوي / بري)")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/maritime/jobs')}
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: '#170e5e',
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+              }}
+            >
+              {t('maritime_freight.maritime_freight_dashboard_tab.s15', "عرض أوامر التشغيل ←")}
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* الشحن البحري */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#170e5e' }}>
+                  <AppIcons.Ship size={15} />
+                  <span>{t('maritime_freight.maritime_freight_dashboard_tab.s16', "الشحن البحري (Ocean Freight - FCL / LCL)")}</span>
+                </span>
+                <span style={{ color: '#0f172a' }}>{modeMetrics.seaCount} {t('maritime_freight.maritime_freight_dashboard_tab.s17', "شحنة (")}{modeMetrics.seaPct}%)</span>
+              </div>
+              <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${modeMetrics.seaPct}%`, height: '100%', background: '#170e5e', borderRadius: '4px' }} />
+              </div>
+            </div>
+
+            {/* الشحن الجوي */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#0369a1' }}>
+                  <AppIcons.Plane size={15} />
+                  <span>{t('maritime_freight.maritime_freight_dashboard_tab.s18', "الشحن الجوي السريع (Air Cargo - IATA Standards)")}</span>
+                </span>
+                <span style={{ color: '#0f172a' }}>{modeMetrics.airCount} {t('maritime_freight.maritime_freight_dashboard_tab.s19', "شحنة (")}{modeMetrics.airPct}%)</span>
+              </div>
+              <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${modeMetrics.airPct}%`, height: '100%', background: '#0284c7', borderRadius: '4px' }} />
+              </div>
+            </div>
+
+            {/* الشحن البري */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#b45309' }}>
+                  <AppIcons.Truck size={15} />
+                  <span>{t('maritime_freight.maritime_freight_dashboard_tab.s20', "النقل البري والترانزيت (Road Freight - CMR)")}</span>
+                </span>
+                <span style={{ color: '#0f172a' }}>{modeMetrics.roadCount} {t('maritime_freight.maritime_freight_dashboard_tab.s21', "شحنة (")}{modeMetrics.roadPct}%)</span>
+              </div>
+              <div style={{ width: '100%', height: '8px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${modeMetrics.roadPct}%`, height: '100%', background: '#d97706', borderRadius: '4px' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card B: كبار النواقل المعتمدة وحجم الإنفاق (Top Carrier Spend) */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
+                {t('maritime_freight.maritime_freight_dashboard_tab.s22', "كبار النواقل المعتمدة (Top Carrier Spend)")}
+              </h3>
+              <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
+                {t('maritime_freight.maritime_freight_dashboard_tab.s23', "أعلى الخطوط الملاحية وشركات الطيران بحسب حجم الإنفاق والشحنات")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/maritime/lines')}
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: '#170e5e',
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+              }}
+            >
+              {t('maritime_freight.maritime_freight_dashboard_tab.s24', "دليل النواقل ←")}
+            </button>
+          </div>
+
+          {topCarriers.length === 0 ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s25', "لا توجد عمليات مسجلة حتى الآن.")}
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'right' }}>
+              <thead>
+                <tr style={{ color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
+                  <th style={{ padding: '6px 8px', fontWeight: 700 }}>{t('maritime_freight.maritime_freight_dashboard_tab.s26', "اسم الناقل")}</th>
+                  <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'center' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s27', "الشحنات")}</th>
+                  <th style={{ padding: '6px 8px', fontWeight: 700 }}>{t('maritime_freight.maritime_freight_dashboard_tab.s28', "إجمالي النولون")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topCarriers.map((c, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '8px', fontWeight: 700, color: '#0f172a' }}>{c.name}</td>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>
+                      <span style={{ padding: '2px 8px', background: '#f1f5f9', color: '#475569', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700 }}>
+                        {c.count} {t('maritime_freight.maritime_freight_dashboard_tab.s29', "أمر")}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px', fontWeight: 800, color: '#b91c1c' }}>
+                      ${Number(c.spend || 0).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Card C: مسار دورة الشحن والتحويل (Freight Pipeline Flow) */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          }}
+        >
+          <div style={{ marginBottom: '14px' }}>
+            <h3 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s30', "تدفق دورة الشحن والأتمتة (Freight Pipeline Funnel)")}
+            </h3>
+            <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s31', "تتبع انتقال العمليات من استفسار العميل المبدئي وحتى التسليم والإفراج الجمركي")}
+            </p>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '8px',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 8px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s32', "الاستفسارات")}</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#170e5e', marginTop: '2px' }}>
+                {counts.inquiries}
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s33', "طلب عميل")}</div>
+            </div>
+
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 8px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s34', "تسعير RFQ")}</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#1e40af', marginTop: '2px' }}>
+                {counts.rfqs}
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s35', "جلسة تسعير")}</div>
+            </div>
+
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 8px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s36', "عروض الأسعار")}</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#a16207', marginTop: '2px' }}>
+                {counts.quotations}
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s37', "عرض صادر")}</div>
+            </div>
+
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 8px' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s38', "أوامر التشغيل")}</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#15803d', marginTop: '2px' }}>
+                {counts.jobs}
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>{t('maritime_freight.maritime_freight_dashboard_tab.s39', "شحنة قيد التنفيذ")}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card D: الإجراءات السريعة ومفاتيح الرقابة (Operational Control Hub) */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          }}
+        >
+          <div style={{ marginBottom: '14px' }}>
+            <h3 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#0f172a' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s40', "مركز التحكم والإجراءات السريعة (Operational Quick Hub)")}
+            </h3>
+            <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#64748b' }}>
+              {t('maritime_freight.maritime_freight_dashboard_tab.s41', "الوصول المباشر إلى الشاشات التخصصية وأدوات الرقابة المالية")}
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setIsCreateInquiryOpen(true)}
+              style={{
+                padding: '10px 14px',
+                background: '#170e5e',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              <AppIcons.Plus size={15} />
+              <span>{t('maritime_freight.maritime_freight_dashboard_tab.s42', "تسجيل طلب شحن عميل")}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsCreateRfqOpen(true)}
+              style={{
+                padding: '10px 14px',
+                background: '#ffffff',
+                color: '#170e5e',
+                border: '1.5px solid #170e5e',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              <AppIcons.Mail size={15} />
+              <span>{t('maritime_freight.maritime_freight_dashboard_tab.s43', "طلب تسعير خطوط (RFQ)")}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/maritime/radar')}
+              style={{
+                padding: '10px 14px',
+                background: '#ffffff',
+                color: '#334155',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              <AppIcons.Clock size={15} />
+              <span>{t('maritime_freight.maritime_freight_dashboard_tab.s44', "رادار الغرامات والسماح")}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/maritime/audit')}
+              style={{
+                padding: '10px 14px',
+                background: '#ffffff',
+                color: '#334155',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              <AppIcons.CheckShield size={15} />
+              <span>{t('maritime_freight.maritime_freight_dashboard_tab.s45', "تدقيق فواتير النواقل")}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export { MaritimeFreightDashboard as MaritimeFreightDashboardTab };

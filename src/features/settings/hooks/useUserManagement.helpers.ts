@@ -1,0 +1,99 @@
+import { blankUserDraft, normalizeUserRecord, USER_ROLE_TEMPLATES, getUserRoleTemplates } from '@/features/settings/components/user-management.shared';
+import type { ManagedUserRecord } from '@/features/settings/api/settings.api';
+import { validateAndNormalizePhone } from '@/shared/utils/phone-utils';
+import { SINGLE_STORE_MODE } from '@/config/product-scope';
+
+export function applyRolePermissions(role: 'super_admin' | 'admin' | 'cashier', vertical?: string) {
+  return [...blankUserDraft(role, vertical).permissions];
+}
+
+export function buildTemplateDraft(current: ManagedUserRecord, templateKey: keyof typeof USER_ROLE_TEMPLATES, vertical?: string) {
+  const templates = getUserRoleTemplates(vertical);
+  const template = templates[templateKey] || USER_ROLE_TEMPLATES[templateKey];
+  return {
+    nextDraft: { ...current, role: template.role, permissions: [...template.permissions], mustChangePassword: current.mustChangePassword ?? true },
+    label: template.label,
+  };
+}
+
+export function toggleDraftPermission(current: ManagedUserRecord, permission: string) {
+  return {
+    ...current,
+    permissions: current.permissions.includes(permission) ? current.permissions.filter((entry) => entry !== permission) : [...current.permissions, permission],
+  };
+}
+
+export function toggleDraftBranch(current: ManagedUserRecord, branchId: string) {
+  const branchIds = current.branchIds.includes(branchId) ? current.branchIds.filter((entry) => entry !== branchId) : [...current.branchIds, branchId];
+  let defaultBranchId = branchIds.includes(current.defaultBranchId) ? current.defaultBranchId : '';
+  if (branchIds.length === 1 && !defaultBranchId) {
+    defaultBranchId = branchIds[0];
+  }
+  return { ...current, branchIds, defaultBranchId };
+}
+
+export function validateUserDraft({
+  draft,
+  managedUsers,
+  branches = [],
+  vertical,
+}: {
+  draft: ManagedUserRecord;
+  managedUsers: ManagedUserRecord[];
+  branches?: Array<{ id: string; name: string }>;
+  vertical?: string;
+}) {
+  const normalizedDraft = normalizeUserRecord(draft);
+  if (!normalizedDraft.username.trim()) throw new Error('اسم المستخدم مطلوب');
+  if (!normalizedDraft.name.trim()) normalizedDraft.name = normalizedDraft.username.trim();
+
+  const phoneText = String(normalizedDraft.phone || '').trim();
+  if (!phoneText) throw new Error('رقم الهاتف المحمول مطلوب ولا يمكن تركه فارغاً');
+
+  const phoneCheck = validateAndNormalizePhone(phoneText, (draft as any).countryCode);
+  if (!phoneCheck.isValid) {
+    throw new Error(phoneCheck.error || 'رقم الهاتف المحمول غير صالح');
+  }
+  normalizedDraft.phone = phoneCheck.normalized;
+
+  const passwordText = String(normalizedDraft.password || '').trim();
+  if (!normalizedDraft.id && !passwordText) throw new Error('كلمة المرور مطلوبة عند إنشاء مستخدم جديد');
+  if (normalizedDraft.id && normalizedDraft.password != null && String(normalizedDraft.password).length > 0 && !passwordText) {
+    throw new Error('كلمة المرور مطلوبة.');
+  }
+
+  if (!SINGLE_STORE_MODE && branches.length > 0) {
+    if (!normalizedDraft.branchIds || normalizedDraft.branchIds.length === 0) {
+      const branchTerm = vertical === 'maritime'
+        ? 'مقر أو مكتب ملاحي واحد على الأقل'
+        : vertical === 'contracting'
+        ? 'موقع عمل أو مقر واحد على الأقل'
+        : 'فرع واحد على الأقل';
+      throw new Error(`يجب اختيار ${branchTerm} لتسري عليه صلاحيات هذا المستخدم`);
+    }
+  }
+
+  if (normalizedDraft.branchIds.length === 1 && !normalizedDraft.defaultBranchId) {
+    normalizedDraft.defaultBranchId = normalizedDraft.branchIds[0];
+  }
+
+  if (normalizedDraft.defaultBranchId && !normalizedDraft.branchIds.includes(normalizedDraft.defaultBranchId)) {
+    normalizedDraft.branchIds = [...normalizedDraft.branchIds, normalizedDraft.defaultBranchId];
+  }
+  const duplicateUser = managedUsers.find((user) => user.username.trim().toLowerCase() === normalizedDraft.username.trim().toLowerCase() && String(user.id || '') !== String(normalizedDraft.id || ''));
+  if (duplicateUser) throw new Error('اسم المستخدم مستخدم بالفعل');
+
+  const duplicatePhone = managedUsers.find((user) => {
+    if (!user.phone || String(user.id || '') === String(normalizedDraft.id || '')) return false;
+    const existingDigits = String(user.phone).replace(/\D/g, '');
+    const draftDigits = String(normalizedDraft.phone).replace(/\D/g, '');
+    return user.phone === normalizedDraft.phone || existingDigits === draftDigits;
+  });
+  if (duplicatePhone) throw new Error('رقم الهاتف المحمول مستخدم بالفعل لمستخدم آخر');
+
+  if (!['super_admin', 'admin'].includes(normalizedDraft.role) && normalizedDraft.isActive === false) {
+    const hasOtherActiveAdmin = managedUsers.some((user) => String(user.id || '') !== String(normalizedDraft.id || '') && ['super_admin', 'admin'].includes(user.role) && user.isActive !== false);
+    if (!hasOtherActiveAdmin) throw new Error('لا يمكن إزالة آخر مدير نشط');
+  }
+  return normalizedDraft;
+}

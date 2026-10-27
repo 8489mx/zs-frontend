@@ -1,0 +1,210 @@
+import { useTranslation } from 'react-i18next';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/shared/ui/button';
+import { Field } from '@/shared/ui/field';
+import { SearchableCombobox } from '@/shared/ui/searchable-combobox';
+import { FormSection } from '@/shared/components/form-section';
+
+import { bomsApi } from '@/features/manufacturing/api/boms.api';
+import { workOrdersApi } from '@/features/manufacturing/api/work-orders.api';
+
+type BomOption = {
+  id: string;
+  name: string;
+  productName: string;
+  expectedCost: number;
+};
+
+type LocationOption = {
+  id: string;
+  name: string;
+};
+
+import { ManufacturingLayout } from '@/features/manufacturing/components/ManufacturingLayout';
+
+import { systemAlert } from '@/shared/components/system-alert';
+
+export default function NewWorkOrderPage() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  
+  const [boms, setBoms] = useState<BomOption[]>([]);
+  const [locations, setLocations] = useState<LocationOption[]>([]);
+  
+  const [bomQuery, setBomQuery] = useState('');
+  const [selectedBom, setSelectedBom] = useState<BomOption | null>(null);
+  
+  const [quantity, setQuantity] = useState(1);
+  
+  const [sourceQuery, setSourceQuery] = useState('');
+  const [selectedSource, setSelectedSource] = useState<LocationOption | null>(null);
+  
+  const [destQuery, setDestQuery] = useState('');
+  const [selectedDest, setSelectedDest] = useState<LocationOption | null>(null);
+
+  const [note, setNote] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    // Fetch BOMs from API
+    bomsApi.list().then(res => {
+      setBoms(res.map(b => ({
+        id: String(b.id),
+        name: `وصفة: ${b.product_name} - ${b.quantity} قطعة`,
+        productName: b.product_name,
+        expectedCost: b.expected_cost || 0
+      })));
+    }).catch(e => console.error('Failed to load BOMs', e));
+
+    // Load Mock Locations
+    setLocations([
+      { id: '1', name: 'المخزن الرئيسي' },
+      { id: '2', name: 'مخزن الخامات' },
+      { id: '3', name: 'مخزن الإنتاج التام' }
+    ]);
+  }, []);
+
+  const handleSave = async () => {
+    if (!selectedBom) return systemAlert('الرجاء اختيار التركيبة');
+    if (!selectedSource || !selectedDest) return systemAlert('الرجاء تحديد المخازن');
+
+    setIsSaving(true);
+    try {
+      await workOrdersApi.create({
+        bomId: Number(selectedBom.id),
+        quantityToProduce: quantity,
+        sourceLocationId: Number(selectedSource.id),
+        destinationLocationId: Number(selectedDest.id),
+        note
+      });
+      systemAlert('تم إنشاء أمر الإنتاج بنجاح');
+      navigate('/manufacturing/work-orders');
+    } catch (e: any) {
+      console.error(e);
+      systemAlert(e?.message || 'حدث خطأ أثناء إنشاء أمر الإنتاج');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <ManufacturingLayout
+      breadcrumbs={[
+        { label: t('manufacturing.new_work_order_page.s0', "التصنيع"), to: '/manufacturing/work-orders' },
+        { label: t('manufacturing.new_work_order_page.s1', "أوامر الإنتاج"), to: '/manufacturing/work-orders' },
+        { label: t('manufacturing.new_work_order_page.s2', "أمر إنتاج جديد") }
+      ]}
+      title={t('manufacturing.new_work_order_page.s3', "أمر إنتاج جديد")}
+      statusBadge={<span className="document-prototype-status-badge is-draft">{t('manufacturing.new_work_order_page.s4', "مسودة")}</span>}
+      actions={
+        <>
+          <Button 
+            variant="secondary" 
+            type="button" 
+            className="purchase-prototype-toolbar-action purchase-prototype-toolbar-action-secondary" 
+            style={{ color: 'var(--danger-color)', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+          >
+            <span aria-hidden="true" className="purchase-prototype-save-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+                <path d="M3 6h18"></path>
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+              </svg>
+            </span>
+            <span>{t('manufacturing.new_work_order_page.s5', "إلغاء المسودة")}</span>
+          </Button>
+          <Button 
+            variant="secondary" 
+            type="button" 
+            className={`purchase-prototype-toolbar-action purchase-prototype-toolbar-action-secondary`} 
+          >
+              <span aria-hidden="true" className="purchase-prototype-save-icon">
+                <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                  <path d="M5 3.75h10.4L19 7.35V20.25H5V3.75Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                  <path d="M7.2 3.75v5.1h6.8v-5.1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                  <path d="M8 20.25v-5.4h8v5.4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <span>{t('manufacturing.new_work_order_page.s6', "حفظ كمسودة")}</span>
+          </Button>
+          <Button 
+            type="button" 
+            className="purchase-prototype-toolbar-action purchase-prototype-toolbar-action-primary" 
+            onClick={handleSave} 
+            disabled={isSaving}
+          >
+            <span>{isSaving ? t('manufacturing.new_work_order_page.s7', "جاري الحفظ...") : t('manufacturing.new_work_order_page.s8', "تأكيد أمر الإنتاج")}</span>
+          </Button>
+        </>
+      }
+      onBack={() => navigate('/manufacturing/work-orders')}
+      onSearchChange={() => {}}
+    >
+        <FormSection title={t('manufacturing.new_work_order_page.s9', "التفاصيل الأساسية")}>
+          <div className="form-grid">
+            <SearchableCombobox
+              label={t('manufacturing.new_work_order_page.s10', "التركيبة (BOM)")}
+              placeholder={t('manufacturing.new_work_order_page.s11', "اختر التركيبة...")}
+              value={bomQuery}
+              onChange={setBomQuery}
+              options={boms}
+              search={(opt, q) => opt.name.toLowerCase().includes(q.toLowerCase())}
+              getLabel={(o) => o.name}
+              onSelect={(o) => { setSelectedBom(o); setBomQuery(o.name); }}
+              createLabel={(q) => `إضافة ${q}`}
+            />
+            <Field label={t('manufacturing.new_work_order_page.s12', "الكمية المراد إنتاجها")}>
+              <input
+                type="number"
+                min="0.001"
+                step="any"
+                className="purchase-prototype-input"
+                style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
+              />
+            </Field>
+          </div>
+        </FormSection>
+
+        <FormSection title={t('manufacturing.new_work_order_page.s13', "توجيهات المخازن")}>
+          <div className="form-grid">
+            <SearchableCombobox
+              label={t('manufacturing.new_work_order_page.s14', "مخزن السحب (المواد الخام)")}
+              placeholder={t('manufacturing.new_work_order_page.s15', "اختر المخزن...")}
+              value={sourceQuery}
+              onChange={setSourceQuery}
+              options={locations}
+              search={(opt, q) => opt.name.toLowerCase().includes(q.toLowerCase())}
+              getLabel={(o) => o.name}
+              onSelect={(o) => { setSelectedSource(o); setSourceQuery(o.name); }}
+              createLabel={(q) => `إضافة ${q}`}
+            />
+            <SearchableCombobox
+              label={t('manufacturing.new_work_order_page.s16', "مخزن الإضافة (المنتج التام)")}
+              placeholder={t('manufacturing.new_work_order_page.s17', "اختر المخزن...")}
+              value={destQuery}
+              onChange={setDestQuery}
+              options={locations}
+              search={(opt, q) => opt.name.toLowerCase().includes(q.toLowerCase())}
+              getLabel={(o) => o.name}
+              onSelect={(o) => { setSelectedDest(o); setDestQuery(o.name); }}
+              createLabel={(q) => `إضافة ${q}`}
+            />
+          </div>
+        </FormSection>
+
+        <FormSection title={t('manufacturing.new_work_order_page.s18', "ملاحظات")}>
+          <textarea
+            className="purchase-prototype-input"
+            rows={4}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={t('manufacturing.new_work_order_page.s19', "اكتب ملاحظات حول أمر الإنتاج...")}
+            style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '4px', resize: 'vertical' }}
+          />
+        </FormSection>
+    </ManufacturingLayout>
+  );
+}

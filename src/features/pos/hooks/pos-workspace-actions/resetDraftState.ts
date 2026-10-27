@@ -1,0 +1,37 @@
+import { clearDraftSnapshot } from '@/features/pos/lib/pos.persistence';
+import type { PosWorkspaceActionParams } from '@/features/pos/hooks/usePosWorkspaceActionGroups';
+
+export function resetDraftState(params: PosWorkspaceActionParams) {
+  params.setCart([]);
+  params.setSelectedLineKey('');
+  params.setCustomerId('');
+  params.setQuickCustomerName?.('');
+  params.setQuickCustomerPhone?.('');
+  params.setQuickCustomerAddress?.('');
+  params.setDiscount(0);
+  params.setLoyaltyPointsRedeemed?.(0);
+  params.setDeliveryFee(0);
+  params.setDiscountApprovalGranted(false);
+  params.setDiscountApprovalSecret('');
+  params.setWholesaleApprovalGranted(false);
+  params.setWholesaleApprovalSecret('');
+  params.setCashAmount(0);
+  params.setTenderedAmount?.(0);
+  params.setCardAmount(0);
+  params.setTransferAmount(0);
+  params.setPaymentType('cash');
+  params.setPaymentChannel('cash');
+  params.setNote('');
+  params.setSearch('');
+  params.setPriceType('retail');
+  params.setQuickAddCode('');
+  params.setScannerMessage('');
+  params.setLastAddedLineKey('');
+  params.setSubmitMessage('');
+  params.setPostSaleSaleKey('');
+  params.setTerminalPaymentDetails?.(null);
+  params.setGuestCount?.(1);
+  params.setGuestCheckPrintedAt?.(null);
+  clearDraftSnapshot();
+  params.requestBarcodeFocus();
+}

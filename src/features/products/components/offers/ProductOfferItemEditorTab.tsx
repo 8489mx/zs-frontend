@@ -1,0 +1,997 @@
+import { useTranslation } from 'react-i18next';
+import { Button } from '@/shared/ui/button';
+import { Field } from '@/shared/ui/field';
+import { MutationFeedback } from '@/shared/components/mutation-feedback';
+import { formatCurrency } from '@/lib/format';
+import { getGlobalCurrencySymbol } from '@/lib/currencies';
+import { addDaysIsoDate, getOfferStatus, todayIsoDate } from './product-offer.utils';
+import { ClockIcon } from '@/shared/components/icons/AppIcons';
+import type { Product, ProductOffer } from '@/types/domain';
+
+interface ProductOfferItemEditorTabProps {
+  product: Product;
+  offerType: 'percent' | 'fixed' | 'price' | 'bundle' | 'bogo';
+  setOfferType: (type: 'percent' | 'fixed' | 'price' | 'bundle' | 'bogo') => void;
+  offerValue: string;
+  setOfferValue: (val: string) => void;
+  offerStartDate: string;
+  setOfferStartDate: (d: string) => void;
+  offerEndDate: string;
+  setOfferEndDate: (d: string) => void;
+  minQty: number;
+  setMinQty: (n: number) => void;
+  bogoBuyQty: number;
+  setBogoBuyQty: (n: number) => void;
+  bogoGetQty: number;
+  setBogoGetQty: (n: number) => void;
+  bogoDiscountPercent: number;
+  setBogoDiscountPercent: (n: number) => void;
+  happyHourEnabled: boolean;
+  setHappyHourEnabled: (b: boolean) => void;
+  happyHourStart: string;
+  setHappyHourStart: (s: string) => void;
+  happyHourEnd: string;
+  setHappyHourEnd: (s: string) => void;
+  daysOfWeek: string;
+  setDaysOfWeek: (s: string) => void;
+  editingIndex: number | null;
+  selectedOffersTab: 'active' | 'expired' | 'all';
+  setSelectedOffersTab: (tab: 'active' | 'expired' | 'all') => void;
+  offers: ProductOffer[];
+  activeOffers: ProductOffer[];
+  expiredOffers: ProductOffer[];
+  visibleOffersList: Array<{ offer: ProductOffer; originalIndex: number }>;
+  numValue: number;
+  retailPrice: number;
+  costPrice: number;
+  simulatedEffectivePrice: number;
+  simulatedSavings: number;
+  simulatedSavingsPercent: number;
+  saveOffer: () => Promise<void>;
+  removeOffer: (index: number) => Promise<void>;
+  loadOffer: (index: number) => void;
+  resetForm: () => void;
+  mutation: any;
+}
+
+export function ProductOfferItemEditorTab({
+  product: _product,
+  offerType,
+  setOfferType,
+  offerValue,
+  setOfferValue,
+  offerStartDate,
+  setOfferStartDate,
+  offerEndDate,
+  setOfferEndDate,
+  minQty,
+  setMinQty,
+  bogoBuyQty,
+  setBogoBuyQty,
+  bogoGetQty,
+  setBogoGetQty,
+  bogoDiscountPercent,
+  setBogoDiscountPercent,
+  happyHourEnabled,
+  setHappyHourEnabled,
+  happyHourStart,
+  setHappyHourStart,
+  happyHourEnd,
+  setHappyHourEnd,
+  daysOfWeek,
+  setDaysOfWeek,
+  editingIndex,
+  selectedOffersTab,
+  setSelectedOffersTab,
+  offers,
+  activeOffers,
+  expiredOffers,
+  visibleOffersList,
+  numValue,
+  retailPrice,
+  costPrice,
+  simulatedEffectivePrice,
+  simulatedSavings,
+  simulatedSavingsPercent,
+  saveOffer,
+  removeOffer,
+  loadOffer,
+  resetForm,
+  mutation,
+}: ProductOfferItemEditorTabProps) {
+  const { t } = useTranslation();
+  return (
+    <div className="two-column-grid" style={{ alignItems: 'start', gap: 16 }}>
+      {/* Form Column */}
+      <div style={{
+        background: '#ffffff',
+        borderRadius: 12,
+        border: editingIndex != null ? '1px solid #6366f1' : '1px solid #e2e8f0',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        padding: '16px 20px',
+        height: '540px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between'
+      }}>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: editingIndex != null ? '#6366f1' : '#2563eb'
+              }} />
+              <strong style={{ fontSize: '0.92rem', color: '#1e293b' }}>
+                {editingIndex != null ? `تعديل بيانات العرض #${editingIndex + 1}` : t('products.offers.product_offer_item_editor_tab.s0', "إعداد عرض ترويجي جديد")}
+              </strong>
+            </div>
+            {editingIndex != null && (
+              <button
+                type="button"
+                onClick={resetForm}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#6366f1',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                {t('products.offers.product_offer_item_editor_tab.s1', "إلغاء التعديل")}
+              </button>
+            )}
+          </div>
+
+          {/* Segmented Type Selector */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: 6 }}>
+              {t('products.offers.product_offer_item_editor_tab.s2', "نوع العرض والخصم")}
+            </label>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(5, 1fr)',
+              gap: 4,
+              background: '#f1f5f9',
+              padding: 3,
+              borderRadius: 8
+            }}>
+              <button
+                type="button"
+                onClick={() => setOfferType('percent')}
+                style={{
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '7px 2px',
+                  fontSize: '0.78rem',
+                  fontWeight: offerType === 'percent' ? 700 : 500,
+                  color: offerType === 'percent' ? '#1e293b' : '#64748b',
+                  background: offerType === 'percent' ? '#ffffff' : 'transparent',
+                  boxShadow: offerType === 'percent' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="19" y1="5" x2="5" y2="19" />
+                  <circle cx="6.5" cy="6.5" r="2.5" />
+                  <circle cx="17.5" cy="17.5" r="2.5" />
+                </svg>
+                {t('products.offers.product_offer_item_editor_tab.s3', "نسبة %")}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOfferType('fixed')}
+                style={{
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '7px 2px',
+                  fontSize: '0.78rem',
+                  fontWeight: offerType === 'fixed' ? 700 : 500,
+                  color: offerType === 'fixed' ? '#1e293b' : '#64748b',
+                  background: offerType === 'fixed' ? '#ffffff' : 'transparent',
+                  boxShadow: offerType === 'fixed' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                  <line x1="7" y1="7" x2="7.01" y2="7" />
+                </svg>
+                {t('products.offers.product_offer_item_editor_tab.s4', "خصم مبلغ")}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOfferType('price')}
+                style={{
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '7px 2px',
+                  fontSize: '0.78rem',
+                  fontWeight: offerType === 'price' ? 700 : 500,
+                  color: offerType === 'price' ? '#1e293b' : '#64748b',
+                  background: offerType === 'price' ? '#ffffff' : 'transparent',
+                  boxShadow: offerType === 'price' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+                  <path d="M12 18V6" />
+                </svg>
+                {t('products.offers.product_offer_item_editor_tab.s5', "سعر محدد")}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOfferType('bundle');
+                  if (minQty <= 1) setMinQty(3);
+                }}
+                style={{
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '7px 2px',
+                  fontSize: '0.78rem',
+                  fontWeight: offerType === 'bundle' ? 700 : 500,
+                  color: offerType === 'bundle' ? '#1e293b' : '#64748b',
+                  background: offerType === 'bundle' ? '#ffffff' : 'transparent',
+                  boxShadow: offerType === 'bundle' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                </svg>
+                {t('products.offers.product_offer_item_editor_tab.s6', "باقة كميات")}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOfferType('bogo')}
+                style={{
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '7px 2px',
+                  fontSize: '0.78rem',
+                  fontWeight: offerType === 'bogo' ? 700 : 500,
+                  color: offerType === 'bogo' ? '#15803d' : '#64748b',
+                  background: offerType === 'bogo' ? '#dcfce7' : 'transparent',
+                  boxShadow: offerType === 'bogo' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>{t('products.offers.product_offer_item_editor_tab.s7', "BOGO اشترِ X")}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Inputs */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {offerType === 'bogo' ? (
+              <div style={{
+                background: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: 8,
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <Field label={t('products.offers.product_offer_item_editor_tab.s8', "اشترِ كمية (X) *")}>
+                    <input
+                      type="number"
+                      min="1"
+                      value={bogoBuyQty}
+                      onChange={(e) => setBogoBuyQty(Math.max(1, Number(e.target.value || 1)))}
+                      style={{ fontWeight: 700 }}
+                    />
+                  </Field>
+                  <Field label={t('products.offers.product_offer_item_editor_tab.s9', "واحصل على كمية (Y) *")}>
+                    <input
+                      type="number"
+                      min="1"
+                      value={bogoGetQty}
+                      onChange={(e) => setBogoGetQty(Math.max(1, Number(e.target.value || 1)))}
+                      style={{ fontWeight: 700 }}
+                    />
+                  </Field>
+                </div>
+                <Field label={t('products.offers.product_offer_item_editor_tab.s10', "نسبة الخصم على الكمية الإضافية Y (%)")}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={bogoDiscountPercent}
+                      onChange={(e) => setBogoDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value || 100))))}
+                      style={{ fontWeight: 700, width: '70px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setBogoDiscountPercent(100)}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        background: bogoDiscountPercent === 100 ? '#166534' : '#ffffff',
+                        color: bogoDiscountPercent === 100 ? '#ffffff' : '#334155',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {t('products.offers.product_offer_item_editor_tab.s11', "100% (مجاناً تماماً)")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBogoDiscountPercent(50)}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        background: bogoDiscountPercent === 50 ? '#166534' : '#ffffff',
+                        color: bogoDiscountPercent === 50 ? '#ffffff' : '#334155',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 6,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {t('products.offers.product_offer_item_editor_tab.s12', "50% (نصف السعر)")}
+                    </button>
+                  </div>
+                </Field>
+              </div>
+            ) : (
+              /* Row: Value & Min Qty */
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 10 }}>
+                <Field label={
+                  offerType === 'percent'
+                    ? t('products.offers.product_offer_item_editor_tab.s13', "نسبة الخصم (%)")
+                    : offerType === 'fixed'
+                      ? `قيمة الخصم للقطعة (${getGlobalCurrencySymbol()})`
+                      : offerType === 'bundle'
+                        ? `إجمالي سعر الباقة (${getGlobalCurrencySymbol()})`
+                        : `سعر القطعة بالعرض (${getGlobalCurrencySymbol()})`
+                }>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder={offerType === 'percent' ? t('products.offers.product_offer_item_editor_tab.s14', "مثال: 20") : offerType === 'fixed' ? t('products.offers.product_offer_item_editor_tab.s15', "مثال: 15") : offerType === 'bundle' ? t('products.offers.product_offer_item_editor_tab.s16', "مثال: 500") : t('products.offers.product_offer_item_editor_tab.s17', "مثال: 80")}
+                    value={offerValue}
+                    onChange={(event) => setOfferValue(event.target.value)}
+                    style={{ fontWeight: 600 }}
+                  />
+                </Field>
+
+                <Field label={offerType === 'bundle' ? t('products.offers.product_offer_item_editor_tab.s18', "عدد قطع الباقة *") : t('products.offers.product_offer_item_editor_tab.s19', "الكمية الأدنى")}>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={minQty}
+                    onChange={(event) => setMinQty(Math.max(1, Number(event.target.value || 1)))}
+                  />
+                </Field>
+              </div>
+            )}
+
+            {/* Row: Dates on a single line */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label={t('products.offers.product_offer_item_editor_tab.s20', "تاريخ البداية")}>
+                <input
+                  type="date"
+                  value={offerStartDate}
+                  onChange={(event) => setOfferStartDate(event.target.value)}
+                />
+              </Field>
+
+              <Field label={t('products.offers.product_offer_item_editor_tab.s21', "تاريخ الانتهاء (اختياري)")}>
+                <input
+                  type="date"
+                  value={offerEndDate}
+                  min={offerStartDate || todayIsoDate()}
+                  onChange={(event) => setOfferEndDate(event.target.value)}
+                />
+              </Field>
+            </div>
+
+            {/* Happy Hours / Scheduling Card */}
+            <div style={{
+              background: happyHourEnabled ? '#fffbeb' : '#f8fafc',
+              border: happyHourEnabled ? '1px solid #fde68a' : '1px solid #e2e8f0',
+              borderRadius: 8,
+              padding: '8px 12px',
+              transition: 'all 0.2s ease',
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, color: happyHourEnabled ? '#92400e' : '#475569' }}>
+                <input
+                  type="checkbox"
+                  checked={happyHourEnabled}
+                  onChange={(e) => setHappyHourEnabled(e.target.checked)}
+                />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <ClockIcon size={14} color={happyHourEnabled ? '#92400e' : '#475569'} />
+                  <span>{t('products.offers.product_offer_item_editor_tab.s22', "تفعيل الساعات الذهبية ومواعيد محددة (Happy Hours)")}</span>
+                </span>
+              </label>
+
+              {happyHourEnabled && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr', gap: 8, marginTop: 8 }}>
+                  <Field label={t('products.offers.product_offer_item_editor_tab.s23', "من الساعة")}>
+                    <input
+                      type="time"
+                      value={happyHourStart}
+                      onChange={(e) => setHappyHourStart(e.target.value)}
+                      style={{ fontSize: '12px' }}
+                    />
+                  </Field>
+                  <Field label={t('products.offers.product_offer_item_editor_tab.s24', "إلى الساعة")}>
+                    <input
+                      type="time"
+                      value={happyHourEnd}
+                      onChange={(e) => setHappyHourEnd(e.target.value)}
+                      style={{ fontSize: '12px' }}
+                    />
+                  </Field>
+                  <Field label={t('products.offers.product_offer_item_editor_tab.s25', "أيام التطبيق")}>
+                    <select
+                      value={daysOfWeek}
+                      onChange={(e) => setDaysOfWeek(e.target.value)}
+                      style={{ fontSize: '12px' }}
+                    >
+                      <option value="">{t('products.offers.product_offer_item_editor_tab.s26', "كل أيام الأسبوع")}</option>
+                      <option value="5,6">{t('products.offers.product_offer_item_editor_tab.s27', "الجمعة والسبت فقط (العطلة)")}</option>
+                      <option value="5">{t('products.offers.product_offer_item_editor_tab.s28', "يوم الجمعة فقط")}</option>
+                      <option value="0,1,2,3,4">{t('products.offers.product_offer_item_editor_tab.s29', "أيام العمل (الأحد - الخميس)")}</option>
+                    </select>
+                  </Field>
+                </div>
+              )}
+            </div>
+
+            {/* Duration Shortcuts on Single Line */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(5, 1fr)',
+              gap: 5,
+              marginTop: -4
+            }}>
+              <button
+                type="button"
+                onClick={() => setOfferEndDate(addDaysIsoDate(1))}
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 6,
+                  padding: '5px 2px',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                  color: '#334155',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f8fafc'}
+              >
+                {t('products.offers.product_offer_item_editor_tab.s30', "يوم")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOfferEndDate(addDaysIsoDate(7))}
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 6,
+                  padding: '5px 2px',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                  color: '#334155',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f8fafc'}
+              >
+                {t('products.offers.product_offer_item_editor_tab.s31', "أسبوع")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOfferEndDate(addDaysIsoDate(14))}
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 6,
+                  padding: '5px 2px',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                  color: '#334155',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f8fafc'}
+              >
+                {t('products.offers.product_offer_item_editor_tab.s32', "أسبوعين")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOfferEndDate(addDaysIsoDate(30))}
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 6,
+                  padding: '5px 2px',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                  color: '#334155',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f8fafc'}
+              >
+                {t('products.offers.product_offer_item_editor_tab.s33', "شهر")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOfferEndDate('')}
+                style={{
+                  background: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: 6,
+                  padding: '5px 2px',
+                  fontSize: '0.74rem',
+                  cursor: 'pointer',
+                  color: '#15803d',
+                  fontWeight: 700,
+                  textAlign: 'center',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#dcfce7'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f0fdf4'}
+              >
+                {t('products.offers.product_offer_item_editor_tab.s34', "دائم")}
+              </button>
+            </div>
+
+            {/* Real-time Simulator Card */}
+            {(numValue > 0 || (offerType === 'bogo' && bogoBuyQty > 0 && bogoGetQty > 0)) && retailPrice > 0 ? (
+              <div style={{
+                background: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: 8,
+                padding: '10px 12px',
+                marginTop: 4
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#166534', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                    </svg>
+                    {offerType === 'bundle'
+                      ? `معاينة الباقة (${minQty} قطع):`
+                      : offerType === 'bogo'
+                        ? `معاينة عرض BOGO (${bogoBuyQty + bogoGetQty} قطع: اشترِ ${bogoBuyQty} واحصل على ${bogoGetQty} ${bogoDiscountPercent === 100 ? t('products.offers.product_offer_item_editor_tab.s35', "مجاناً") : `بخصم ${bogoDiscountPercent}%`}):`
+                        : t('products.offers.product_offer_item_editor_tab.s36', "معاينة السعر في الكاشير:")}
+                  </span>
+                  <span style={{ fontSize: '0.74rem', background: '#16a34a', color: '#ffffff', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                    {t('products.offers.product_offer_item_editor_tab.s37', "وفرت")} {simulatedSavingsPercent.toFixed(0)}%
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ textDecoration: 'line-through', color: '#64748b', fontSize: '0.85rem' }}>
+                    {formatCurrency(
+                      offerType === 'bundle'
+                        ? retailPrice * minQty
+                        : offerType === 'bogo'
+                          ? retailPrice * (bogoBuyQty + bogoGetQty)
+                          : retailPrice
+                    )}
+                  </span>
+                  <span style={{ fontSize: '1.15rem', fontWeight: 800, color: '#15803d' }}>
+                    {formatCurrency(
+                      offerType === 'bundle'
+                        ? numValue
+                        : offerType === 'bogo'
+                          ? Math.max(0, (retailPrice * (bogoBuyQty + bogoGetQty)) - simulatedSavings)
+                          : simulatedEffectivePrice
+                    )}
+                  </span>
+                  <span style={{ fontSize: '0.78rem', color: '#166534', fontWeight: 500 }}>
+                    {offerType === 'bundle' 
+                      ? `(سعر القطعة داخل الباقة: ${formatCurrency(simulatedEffectivePrice)} · توفير ${formatCurrency(simulatedSavings)})`
+                      : offerType === 'bogo'
+                        ? `(متوسط سعر القطعة: ${formatCurrency(simulatedEffectivePrice)} · توفير ${formatCurrency(simulatedSavings)})`
+                        : `(توفير ${formatCurrency(simulatedSavings)})`
+                    }
+                  </span>
+                </div>
+
+                {costPrice > 0 && simulatedEffectivePrice < costPrice ? (
+                  <div style={{ fontSize: '0.72rem', color: '#b91c1c', marginTop: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    <span>{t('products.offers.product_offer_item_editor_tab.s38', "سعر العرض أقل من سعر التكلفة (")}{formatCurrency(costPrice)})</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Form Buttons */}
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button
+              type="button"
+              onClick={() => void saveOffer()}
+              disabled={mutation.isPending || (offerType === 'bogo' ? !(bogoBuyQty > 0 && bogoGetQty > 0) : !offerValue)}
+              style={{
+                flex: 1,
+                background: '#1e293b',
+                color: '#ffffff',
+                fontWeight: 600,
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 16px'
+              }}
+            >
+              {mutation.isPending ? t('products.offers.product_offer_item_editor_tab.s39', "جاري الحفظ...") : editingIndex != null ? t('products.offers.product_offer_item_editor_tab.s40', "حفظ تعديل العرض") : t('products.offers.product_offer_item_editor_tab.s41', "إضافة العرض للصنف")}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={resetForm}
+              disabled={mutation.isPending}
+            >
+              {t('products.offers.product_offer_item_editor_tab.s42', "إعادة التهيئة")}
+            </Button>
+          </div>
+
+          <MutationFeedback isError={mutation.isError} error={mutation.error} errorFallback={t('products.offers.product_offer_item_editor_tab.s43', "تعذر حفظ العرض")} />
+          <MutationFeedback isSuccess={mutation.isSuccess && !mutation.isPending} successText={t('products.offers.product_offer_item_editor_tab.s44', "تم حفظ العروض وتحديثها بنجاح.")} />
+        </div>
+      </div>
+
+      {/* Current Offers Column */}
+      <div style={{
+        background: '#ffffff',
+        borderRadius: 12,
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        padding: '16px 20px',
+        height: '540px',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        <div style={{ marginBottom: 10 }}>
+          <strong style={{ fontSize: '0.92rem', color: '#1e293b', display: 'block' }}>
+            {t('products.offers.product_offer_item_editor_tab.s45', "العروض المسجلة")}
+          </strong>
+          <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+            {t('products.offers.product_offer_item_editor_tab.s46', "إدارة وتعديل أو حذف العروض الحالية والسابقة")}
+          </span>
+        </div>
+
+        {/* Filter Tabs */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 0.8fr',
+          background: '#f1f5f9',
+          padding: 3,
+          borderRadius: 8,
+          marginBottom: 12,
+          gap: 4
+        }}>
+          <button
+            type="button"
+            onClick={() => setSelectedOffersTab('active')}
+            style={{
+              border: 'none',
+              borderRadius: 6,
+              padding: '6px 4px',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              color: selectedOffersTab === 'active' ? '#047857' : '#64748b',
+              background: selectedOffersTab === 'active' ? '#ffffff' : 'transparent',
+              boxShadow: selectedOffersTab === 'active' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 5,
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+              transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
+            }}
+          >
+            <span style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: '#10b981'
+            }} />
+            {t('products.offers.product_offer_item_editor_tab.s47', "عروض نشطة (")}{activeOffers.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedOffersTab('expired')}
+            style={{
+              border: 'none',
+              borderRadius: 6,
+              padding: '6px 4px',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              color: selectedOffersTab === 'expired' ? '#b91c1c' : '#64748b',
+              background: selectedOffersTab === 'expired' ? '#ffffff' : 'transparent',
+              boxShadow: selectedOffersTab === 'expired' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 5,
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+              transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
+            }}
+          >
+            <span style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: '#ef4444'
+            }} />
+            {t('products.offers.product_offer_item_editor_tab.s48', "عروض منتهية (")}{expiredOffers.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedOffersTab('all')}
+            style={{
+              border: 'none',
+              borderRadius: 6,
+              padding: '6px 4px',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              color: selectedOffersTab === 'all' ? '#1e293b' : '#64748b',
+              background: selectedOffersTab === 'all' ? '#ffffff' : 'transparent',
+              boxShadow: selectedOffersTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+              transition: 'background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease'
+            }}
+          >
+            {t('products.offers.product_offer_item_editor_tab.s49', "الكل (")}{offers.length})
+          </button>
+        </div>
+
+        {/* List of cards */}
+        <div className="page-stack" style={{ gap: 8, flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: 2 }}>
+          {visibleOffersList.length ? visibleOffersList.map(({ offer, originalIndex }) => {
+            const status = getOfferStatus(offer);
+            const isCurrentlyEditing = editingIndex === originalIndex;
+            const isBogo = offer.type === 'bogo';
+            const minQ = Math.max(1, Number(offer.minQty || 1));
+            const typeName = isBogo
+              ? t('products.offers.product_offer_item_editor_tab.s50', "عرض BOGO")
+              : offer.type === 'bundle'
+                ? `باقة (${minQ} قطع)`
+                : offer.type === 'price'
+                  ? t('products.offers.product_offer_item_editor_tab.s51', "سعر محدد")
+                  : offer.type === 'fixed'
+                    ? t('products.offers.product_offer_item_editor_tab.s52', "خصم مبلغ")
+                    : t('products.offers.product_offer_item_editor_tab.s53', "خصم نسبة");
+            const valText = isBogo
+              ? `اشترِ ${offer.bogoBuyQty || 1} واحصل على ${offer.bogoGetQty || 1} ${Number(offer.bogoDiscountPercent ?? 100) === 100 ? t('products.offers.product_offer_item_editor_tab.s54', "مجاناً") : `بخصم ${offer.bogoDiscountPercent}%`}`
+              : offer.type === 'percent'
+                ? `${offer.value}%`
+                : `${formatCurrency(Number(offer.value || 0))}`;
+
+            return (
+              <div
+                key={`${offer.id || originalIndex}`}
+                style={{
+                  background: isCurrentlyEditing ? '#f8fafc' : '#ffffff',
+                  border: isCurrentlyEditing ? '1px solid #6366f1' : '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>
+                      {typeName}: {valText}
+                    </strong>
+                    {!isBogo && (
+                      <span style={{
+                        background: '#f1f5f9',
+                        color: '#475569',
+                        padding: '1px 5px',
+                        borderRadius: 4,
+                        fontSize: '0.72rem',
+                        fontWeight: 600
+                      }}>
+                        {minQ > 1 ? `من ${minQ} قطع` : t('products.offers.product_offer_item_editor_tab.s55', "من أول قطعة")}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{
+                    background: status.bg,
+                    color: status.color,
+                    border: `1px solid ${status.border}`,
+                    padding: '1px 6px',
+                    borderRadius: 10,
+                    fontSize: '0.7rem',
+                    fontWeight: 600
+                  }}>
+                    {status.label}
+                  </span>
+                </div>
+
+                {offer.happyHourStart && offer.happyHourEnd && (
+                  <div style={{
+                    fontSize: '0.72rem',
+                    color: '#92400e',
+                    background: '#fef3c7',
+                    border: '1px solid #fde68a',
+                    borderRadius: 4,
+                    padding: '2px 6px',
+                    marginBottom: 6,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}>
+                    <ClockIcon size={12} color="#92400e" />
+                    <span>
+                      {t('products.offers.product_offer_item_editor_tab.s56', "ساعات العرض:")} {offer.happyHourStart} {t('products.offers.product_offer_item_editor_tab.s57', "إلى")} {offer.happyHourEnd}
+                      {offer.daysOfWeek ? ` (${offer.daysOfWeek === '5,6' ? t('products.offers.product_offer_item_editor_tab.s58', "عطلة الأسبوع") : offer.daysOfWeek === '5' ? t('products.offers.product_offer_item_editor_tab.s59', "الجمعة فقط") : t('products.offers.product_offer_item_editor_tab.s60', "أيام العمل")})` : t('products.offers.product_offer_item_editor_tab.s61', " (يومياً)")}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ fontSize: '0.74rem', color: '#64748b', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  <span>{t('products.offers.product_offer_item_editor_tab.s62', "يبدأ:")} {offer.from || todayIsoDate()}</span>
+                  <span>·</span>
+                  <span>{t('products.offers.product_offer_item_editor_tab.s63', "ينتهي:")} {offer.to ? offer.to : t('products.offers.product_offer_item_editor_tab.s64', "مفتوح (دائم)")}</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => loadOffer(originalIndex)}
+                    disabled={mutation.isPending}
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#334155',
+                      borderRadius: 5,
+                      padding: '3px 8px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                    {t('products.offers.product_offer_item_editor_tab.s65', "تعديل")}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void removeOffer(originalIndex)}
+                    disabled={mutation.isPending}
+                    style={{
+                      background: '#fff',
+                      border: '1px solid #fee2e2',
+                      color: '#dc2626',
+                      borderRadius: 5,
+                      padding: '3px 8px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                    {t('products.offers.product_offer_item_editor_tab.s66', "حذف")}
+                  </button>
+                </div>
+              </div>
+            );
+          }) : (
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '30px 16px',
+              textAlign: 'center',
+              color: '#94a3b8',
+              background: '#f8fafc',
+              borderRadius: 8,
+              border: '1px dashed #cbd5e1'
+            }}>
+              <div style={{ marginBottom: 8, color: '#94a3b8' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: '0 auto' }}>
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                  <line x1="7" y1="7" x2="7.01" y2="7" />
+                </svg>
+              </div>
+              <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#64748b' }}>
+                {selectedOffersTab === 'expired' ? t('products.offers.product_offer_item_editor_tab.s67', "لا توجد عروض منتهية") : t('products.offers.product_offer_item_editor_tab.s68', "لا توجد عروض نشطة")}
+              </div>
+              <div style={{ fontSize: '0.78rem', marginTop: 4 }}>
+                {selectedOffersTab === 'expired' ? t('products.offers.product_offer_item_editor_tab.s69', "جميع العروض المسجلة لا تزال سارية ونشطة") : t('products.offers.product_offer_item_editor_tab.s70', "استخدم النموذج لإنشاء أول عرض ترويجي للصنف")}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

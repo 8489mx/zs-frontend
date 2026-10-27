@@ -1,0 +1,247 @@
+import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { settingsApi, type OfflineRelease } from '@/features/settings/api/settings.api';
+import { FormSection } from '@/shared/components/form-section';
+import { Field } from '@/shared/ui/field';
+import { Button } from '@/shared/ui/button';
+import { CheckCircleIcon } from '@/shared/components/icons/AppIcons';
+
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return '—';
+  try {
+    return new Intl.DateTimeFormat('ar-EG', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }).format(new Date(dateStr));
+  } catch {
+    return dateStr;
+  }
+}
+
+export function OfflineReleasesPage() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  // ── Form state ──────────────────────────────────────────────────────────
+  const [version, setVersion] = useState('');
+  const [changelog, setChangelog] = useState('');
+  const [patchUrl, setPatchUrl] = useState('');
+  const [formError, setFormError] = useState('');
+
+  // ── Data ────────────────────────────────────────────────────────────────
+  const { data: releases = [], isLoading, isError } = useQuery<OfflineRelease[]>({
+    queryKey: ['offline-releases'],
+    queryFn: () => settingsApi.offlineReleases.list(),
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['offline-releases'] });
+
+  const createMutation = useMutation({
+    mutationFn: settingsApi.offlineReleases.create,
+    onSuccess: () => {
+      invalidate();
+      setVersion('');
+      setChangelog('');
+      setPatchUrl('');
+      setFormError('');
+    },
+    onError: (err: any) => setFormError(err?.message || 'حدث خطأ عند الإنشاء'),
+  });
+
+  const promoteMutation = useMutation({
+    mutationFn: (id: number) => settingsApi.offlineReleases.promote(id),
+    onSuccess: invalidate,
+  });
+
+  const deactivateMutation = useMutation({
+    mutationFn: (id: number) => settingsApi.offlineReleases.deactivate(id),
+    onSuccess: invalidate,
+  });
+
+  const activeRelease = releases.find((r) => r.isActive);
+
+  function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!version.trim()) return setFormError('رقم الإصدار مطلوب');
+    if (!patchUrl.trim()) return setFormError('رابط ملف التحديث مطلوب');
+    setFormError('');
+    createMutation.mutate({ version: version.trim(), changelog: changelog.trim(), patchUrl: patchUrl.trim() });
+  }
+
+  return (
+    <main className="document-prototype-column" dir="rtl">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{t('settings.offline_releases_page.s0', "إصدارات التحديث الأوفلاين")}</h1>
+          <p className="page-description">
+            {t('settings.offline_releases_page.s1', "أنشئ إصدارات جديدة واعتمد النسخة المستقرة التي ستصل إشعاراتها لعملاء النسخة الأوفلاين (Portable).")}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Active release banner ─────────────────────────────────────── */}
+      {activeRelease && (
+        <div className="success-box" style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <CheckCircleIcon size={16} color="#16a34a" />
+          <strong>{t('settings.offline_releases_page.s2', "النسخة المعتمدة حالياً للعملاء:")}</strong>{' '}
+          <span style={{ fontFamily: 'monospace', fontSize: 15 }}>v{activeRelease.version}</span>
+          {activeRelease.promotedBy && (
+            <span className="muted"> {t('settings.offline_releases_page.s3', "— اعتمدها")} {activeRelease.promotedBy} {t('settings.offline_releases_page.s4', "في")} {formatDate(activeRelease.promotedAt)}</span>
+          )}
+        </div>
+      )}
+
+      {/* ── Create new release ──────────────────────────────────────────── */}
+      <FormSection
+        title={t('settings.offline_releases_page.s5', "إنشاء إصدار جديد")}
+        description={t('settings.offline_releases_page.s6', "أدخل رقم الإصدار ورابط ملف التحديث (patch.zip). الإصدار يُحفظ كـ Draft حتى تعتمده.")}
+      >
+        <form onSubmit={handleCreate} className="form-grid">
+          <Field label={t('settings.offline_releases_page.s7', "رقم الإصدار")}>
+            <input
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+              placeholder="1.5.0"
+              disabled={createMutation.isPending}
+              style={{ fontFamily: 'monospace' }}
+            />
+            <small className="muted">{t('settings.offline_releases_page.s8', "مثال: 1.5.0")}</small>
+          </Field>
+          <Field label={t('settings.offline_releases_page.s9', "رابط ملف التحديث (patch_url)")}>
+            <input
+              value={patchUrl}
+              onChange={(e) => setPatchUrl(e.target.value)}
+              placeholder="https://example.com/updates/patch-1.5.0.zip"
+              disabled={createMutation.isPending}
+              dir="ltr"
+            />
+            <small className="muted">{t('settings.offline_releases_page.s10', "رابط مباشر لتحميل ملف zip يحتوي backend/dist و frontend/dist")}</small>
+          </Field>
+          <Field label={t('settings.offline_releases_page.s11', "ملاحظات الإصدار (Changelog)")}>
+            <textarea
+              rows={4}
+              value={changelog}
+              onChange={(e) => setChangelog(e.target.value)}
+              placeholder={t('settings.offline_releases_page.s12', "- إصلاح مشكلة عرض المخزن\n- تحسين سرعة صفحة الأصناف")}
+              disabled={createMutation.isPending}
+            />
+            <small className="muted">{t('settings.offline_releases_page.s13', "اختياري — ما الذي تغيّر في هذا الإصدار؟")}</small>
+          </Field>
+          {formError && <div className="warning-box" style={{ gridColumn: '1 / -1' }}>{formError}</div>}
+          {createMutation.isSuccess && (
+            <div className="success-box" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircleIcon size={16} color="#16a34a" />
+              <span>{t('settings.offline_releases_page.s14', "تم إنشاء الإصدار بنجاح")}</span>
+            </div>
+          )}
+          <div className="actions" style={{ gridColumn: '1 / -1' }}>
+            <Button type="submit" variant="primary" disabled={createMutation.isPending}>
+              {createMutation.isPending ? t('settings.offline_releases_page.s15', "جاري الحفظ...") : t('settings.offline_releases_page.s16', "+ إنشاء إصدار")}
+            </Button>
+          </div>
+        </form>
+      </FormSection>
+
+      {/* ── Releases list ───────────────────────────────────────────────── */}
+      <FormSection
+        title={t('settings.offline_releases_page.s17', "سجل الإصدارات")}
+        description={t('settings.offline_releases_page.s18', "جميع الإصدارات المنشأة. الإصدار المفعّل هو الذي يراه عملاء الأوفلاين.")}
+      >
+        {isLoading && <div className="muted">{t('settings.offline_releases_page.s19', "جاري التحميل...")}</div>}
+        {isError && <div className="warning-box">{t('settings.offline_releases_page.s20', "تعذر تحميل الإصدارات")}</div>}
+        {!isLoading && !isError && releases.length === 0 && (
+          <div className="muted small">{t('settings.offline_releases_page.s21', "لا توجد إصدارات بعد — أنشئ إصدارًا من الأعلى.")}</div>
+        )}
+        {releases.length > 0 && (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('settings.offline_releases_page.s22', "الإصدار")}</th>
+                  <th>{t('settings.offline_releases_page.s23', "الحالة")}</th>
+                  <th>{t('settings.offline_releases_page.s24', "ملاحظات الإصدار")}</th>
+                  <th>{t('settings.offline_releases_page.s25', "رابط الملف")}</th>
+                  <th>{t('settings.offline_releases_page.s26', "تاريخ الإنشاء")}</th>
+                  <th>{t('settings.offline_releases_page.s27', "اعتُمد بواسطة")}</th>
+                  <th>{t('settings.offline_releases_page.s28', "إجراء")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {releases.map((release) => (
+                  <tr key={release.id} className={release.isActive ? 'table-row-selected' : undefined}>
+                    <td>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>v{release.version}</span>
+                    </td>
+                    <td>
+                      {release.isActive ? (
+                        <span className="status-badge status-posted" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <CheckCircleIcon size={12} color="#16a34a" /> {t('settings.offline_releases_page.s29', "مفعّل")}
+                        </span>
+                      ) : (
+                        <span className="status-badge status-draft">Draft</span>
+                      )}
+                    </td>
+                    <td>
+                      <span className="muted small" style={{ whiteSpace: 'pre-wrap', maxWidth: 200, display: 'block' }}>
+                        {release.changelog || '—'}
+                      </span>
+                    </td>
+                    <td>
+                      {release.patchUrl ? (
+                        <a href={release.patchUrl} target="_blank" rel="noreferrer" className="muted small" dir="ltr" style={{ wordBreak: 'break-all' }}>
+                          {release.patchUrl.length > 40 ? release.patchUrl.slice(0, 40) + '...' : release.patchUrl}
+                        </a>
+                      ) : '—'}
+                    </td>
+                    <td><span className="muted small">{formatDate(release.createdAt)}</span></td>
+                    <td>
+                      <span className="muted small">
+                        {release.promotedBy ? `${release.promotedBy}` : '—'}
+                        {release.promotedAt ? <><br />{formatDate(release.promotedAt)}</> : null}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="actions" style={{ gap: 6 }}>
+                        {!release.isActive && (
+                           <Button
+                            variant="primary"
+                            type="button"
+                            disabled={promoteMutation.isPending}
+                            onClick={() => promoteMutation.mutate(release.id)}
+                          >
+                            {t('settings.offline_releases_page.s30', "اعتماد كنسخة مستقرة")}
+                          </Button>
+                        )}
+                        {release.isActive && (
+                          <Button
+                            variant="secondary"
+                            type="button"
+                            disabled={deactivateMutation.isPending}
+                            onClick={() => deactivateMutation.mutate(release.id)}
+                          >
+                            {t('settings.offline_releases_page.s31', "إلغاء التفعيل")}
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {(promoteMutation.isSuccess || deactivateMutation.isSuccess) && (
+          <div className="success-box" style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <CheckCircleIcon size={16} color="#16a34a" />
+            <span>{promoteMutation.data?.message || deactivateMutation.data?.message}</span>
+          </div>
+        )}
+        {(promoteMutation.isError || deactivateMutation.isError) && (
+          <div className="warning-box" style={{ marginTop: 12 }}>{t('settings.offline_releases_page.s32', "حدث خطأ — حاول مرة أخرى")}</div>
+        )}
+      </FormSection>
+    </main>
+  );
+}

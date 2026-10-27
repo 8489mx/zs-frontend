@@ -1,0 +1,590 @@
+import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
+import { ContractingProject, ContractingSubcontract } from '../contracting.types';
+import { AppIcons } from '@/shared/components/icons/AppIcons';
+import { RetentionLedgerModal } from './RetentionLedgerModal';
+import { PaymentHoldsModal } from './PaymentHoldsModal';
+import { CreateIpcInvoiceModal } from './CreateIpcInvoiceModal';
+import { SubcontractorsDirectoryModal } from './SubcontractorsDirectoryModal';
+import { SubcontractorLedgerModal } from './SubcontractorLedgerModal';
+import { RecordSubcontractorPaymentModal } from './RecordSubcontractorPaymentModal';
+import { GuaranteesDirectoryModal } from './GuaranteesDirectoryModal';
+import { useSystemCurrency } from '@/shared/hooks/use-system-currency';
+
+interface ContractingSubcontractsTabProps {
+  subcontracts: ContractingSubcontract[];
+  loading: boolean;
+  projectId?: string;
+  projectName?: string;
+  project?: ContractingProject | null;
+  onNewSubcontract: () => void;
+  onRefresh?: () => void;
+}
+
+export function ContractingSubcontractsTab({
+  subcontracts,
+  loading,
+  projectId,
+  projectName,
+  project,
+  onNewSubcontract,
+  onRefresh,
+}: ContractingSubcontractsTabProps) {
+  const { t } = useTranslation();
+  const { currencySymbol } = useSystemCurrency();
+  const [isRetentionModalOpen, setIsRetentionModalOpen] = useState(false);
+  const [isPaymentHoldsOpen, setIsPaymentHoldsOpen] = useState(false);
+  const [selectedSubcontractForIpc, setSelectedSubcontractForIpc] = useState<ContractingSubcontract | null>(null);
+
+  // Subcontractor Master Directory & Ledger & Payments
+  const [isSubcontractorsDirectoryOpen, setIsSubcontractorsDirectoryOpen] = useState(false);
+  const [selectedLedgerSubId, setSelectedLedgerSubId] = useState<number | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [selectedPaymentSubId, setSelectedPaymentSubId] = useState<number | null>(null);
+
+  // Bank Guarantees & Gateway G1
+  const [isGuaranteesDirectoryOpen, setIsGuaranteesDirectoryOpen] = useState(false);
+  const [selectedSubcontractIdForGuarantees, setSelectedSubcontractIdForGuarantees] = useState<string | undefined>(undefined);
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active':
+        return <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: 'var(--font-badge)', fontWeight: 600, background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>{t('contracting.contracting_subcontracts_tab.s0', "عقد ساري")}</span>;
+      case 'completed':
+        return <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: 'var(--font-badge)', fontWeight: 600, background: '#e0e7ff', color: '#3730a3', border: '1px solid #c7d2fe' }}>{t('contracting.contracting_subcontracts_tab.s1', "مكتمل ومسلّم")}</span>;
+      case 'terminated':
+        return <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: 'var(--font-badge)', fontWeight: 600, background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca' }}>{t('contracting.contracting_subcontracts_tab.s2', "مفسوخ")}</span>;
+      default:
+        return <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: 'var(--font-badge)', fontWeight: 600, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0' }}>{t('contracting.contracting_subcontracts_tab.s3', "مسودة")}</span>;
+    }
+  };
+
+  const totalCommitted = subcontracts.reduce((sum, sc) => sum + Number(sc.totalAmount || 0), 0);
+  const totalInvoiced = subcontracts.reduce((sum, sc) => sum + Number(sc.totalInvoiced || 0), 0);
+  const totalRetention = subcontracts.reduce((sum, sc) => sum + Number(sc.totalRetentionHeld || 0), 0);
+  const totalRemaining = subcontracts.reduce(
+    (sum, sc) =>
+      sum +
+      (sc.remainingCommitment !== undefined
+        ? Number(sc.remainingCommitment)
+        : Math.max(0, Number(sc.totalAmount || 0) - Number(sc.totalInvoiced || 0))),
+    0,
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} dir="rtl">
+      {/* هيدر التبويب */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          width: '100%',
+        }}
+      >
+        <div style={{ minWidth: '280px', flex: '1 1 auto' }}>
+          <h2 style={{ fontSize: 'var(--font-section-title)', fontWeight: 700, color: '#1e293b', margin: 0 }}>
+            {t('contracting.contracting_subcontracts_tab.s4', "إسناد أعمال مقاولي الباطن والالتزامات (Subcontract Commitments)")}
+          </h2>
+          <p style={{ fontSize: 'var(--font-subtitle)', color: '#64748b', margin: '4px 0 0' }}>
+            {projectName ? `المشروع: ${projectName}` : t('contracting.contracting_subcontracts_tab.s5', "إدارة أوامر الإسناد، نسب الحجز، ونطاق الأعمال الموكولة للمقاولين")}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-start' }}>
+          {/* دليل وسجل مقاولي الباطن */}
+          <button
+            type="button"
+            onClick={() => setIsSubcontractorsDirectoryOpen(true)}
+            style={{
+              height: '34px',
+              padding: '0 12px',
+              borderRadius: '8px',
+              fontWeight: 600,
+              background: '#ffffff',
+              color: '#170e5e',
+              border: '1px solid #c7d2fe',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: 'var(--font-body)',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <AppIcons.Users size={15} />
+            <span>{t('contracting.contracting_subcontracts_tab.s6', "دليل وسجل مقاولي الباطن")}</span>
+          </button>
+
+          {/* تسجيل صرف دفعة لمقاول */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedPaymentSubId(null);
+              setIsPaymentModalOpen(true);
+            }}
+            style={{
+              height: '34px',
+              padding: '0 12px',
+              borderRadius: '8px',
+              fontWeight: 600,
+              background: '#ffffff',
+              color: '#047857',
+              border: '1px solid #a7f3d0',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: 'var(--font-body)',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <AppIcons.CreditCard size={15} />
+            <span>{t('contracting.contracting_subcontracts_tab.s7', "صرف دفعة لمقاول")}</span>
+          </button>
+
+          {/* خطابات الضمان البنكية والبوابة الرقابية G1 */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedSubcontractIdForGuarantees(undefined);
+              setIsGuaranteesDirectoryOpen(true);
+            }}
+            style={{
+              height: '34px',
+              padding: '0 12px',
+              borderRadius: '8px',
+              fontWeight: 600,
+              background: '#ffffff',
+              color: '#1e40af',
+              border: '1px solid #bfdbfe',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: 'var(--font-body)',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <AppIcons.CheckShield size={15} />
+            <span>{t('contracting.contracting_subcontracts_tab.s8', "خطابات الضمان البنكية (G1)")}</span>
+          </button>
+
+          {/* سجل ضمان الأعمال */}
+          <button
+            type="button"
+            onClick={() => setIsRetentionModalOpen(true)}
+            style={{
+              height: '34px',
+              padding: '0 12px',
+              borderRadius: '8px',
+              fontWeight: 600,
+              background: '#ffffff',
+              color: '#334155',
+              border: '1px solid #cbd5e1',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: 'var(--font-body)',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <AppIcons.ShieldCheck size={15} />
+            <span>{t('contracting.contracting_subcontracts_tab.s9', "ضمان الأعمال المحتجز (")}{totalRetention.toLocaleString('ar-EG')} {currencySymbol})</span>
+          </button>
+
+          {/* حجز الدفعات للملاحظات الفنية */}
+          <button
+            type="button"
+            onClick={() => setIsPaymentHoldsOpen(true)}
+            style={{
+              height: '34px',
+              padding: '0 12px',
+              borderRadius: '8px',
+              fontWeight: 600,
+              background: '#ffffff',
+              color: '#334155',
+              border: '1px solid #cbd5e1',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: 'var(--font-body)',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <AppIcons.AlertTriangle size={15} />
+            <span>{t('contracting.contracting_subcontracts_tab.s10', "حجز الدفعات والملاحظات الفنية")}</span>
+          </button>
+
+          {/* زر إضافة إسناد */}
+          <button
+            type="button"
+            onClick={onNewSubcontract}
+            style={{
+              height: '34px',
+              padding: '0 14px',
+              borderRadius: '8px',
+              fontWeight: 700,
+              background: '#170e5e',
+              color: '#ffffff',
+              border: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: 'var(--font-body)',
+              boxShadow: '0 1px 3px rgba(23, 14, 94, 0.15)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <AppIcons.Plus size={15} />
+            <span>{t('contracting.contracting_subcontracts_tab.s11', "إسناد أعمال لمقاول باطن")}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* بطاقة إجمالي الالتزامات والمؤشرات المالية */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px' }}>
+          <div style={{ fontSize: 'var(--font-micro)', color: '#64748b', fontWeight: 600 }}>{t('contracting.contracting_subcontracts_tab.s12', "إجمالي عقود مقاولي الباطن")}</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+            {subcontracts.length} <span style={{ fontSize: 'var(--font-micro)', color: '#64748b' }}>{t('contracting.contracting_subcontracts_tab.s13', "عقد")}</span>
+          </div>
+        </div>
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px' }}>
+          <div style={{ fontSize: 'var(--font-micro)', color: '#64748b', fontWeight: 600 }}>{t('contracting.contracting_subcontracts_tab.s14', "إجمالي الالتزامات التعاقدية")}</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#170e5e', marginTop: '2px' }}>
+            {totalCommitted.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{currencySymbol}</span>
+          </div>
+        </div>
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px' }}>
+          <div style={{ fontSize: 'var(--font-micro)', color: '#64748b', fontWeight: 600 }}>{t('contracting.contracting_subcontracts_tab.s15', "المستخلص المنفذ للمقاولين")}</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#2563eb', marginTop: '2px' }}>
+            {totalInvoiced.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{currencySymbol}</span>
+          </div>
+        </div>
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px' }}>
+          <div style={{ fontSize: 'var(--font-micro)', color: '#64748b', fontWeight: 600 }}>{t('contracting.contracting_subcontracts_tab.s16', "المتبقي من الالتزامات")}</div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#15803d', marginTop: '2px' }}>
+            {totalRemaining.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{currencySymbol}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* جدول العقود */}
+      <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', minHeight: '280px', display: 'flex', flexDirection: 'column' }}>
+        {loading ? (
+          <div style={{ flex: 1, minHeight: '280px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '32px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '50%', border: '3px solid #e2e8f0', borderTopColor: '#170e5e', animation: 'spin 0.8s linear infinite' }} />
+            <span style={{ fontSize: 'var(--font-subtitle)', color: '#94a3b8', fontWeight: 600 }}>{t('contracting.contracting_subcontracts_tab.s17', "جاري تحميل عقود مقاولي الباطن...")}</span>
+          </div>
+        ) : subcontracts.length === 0 ? (
+          <div style={{ flex: 1, minHeight: '280px', padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ color: '#94a3b8', marginBottom: '12px' }}>
+              <AppIcons.Users size={48} />
+            </div>
+            <div style={{ fontSize: 'var(--font-section-title)', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+              {t('contracting.contracting_subcontracts_tab.s18', "لا توجد عقود مقاولي باطن مسجلة لهذا المشروع")}
+            </div>
+            <div style={{ fontSize: 'var(--font-subtitle)', color: '#64748b', maxWidth: '420px', margin: '0 auto 16px' }}>
+              {t('contracting.contracting_subcontracts_tab.s19', "قم بإسناد الحزم التخصصية (أعمال كهروميكانيكية، عزل، دهانات...) لمقاولي الباطن لمتابعة التكاليف والمستخلصات.")}
+            </div>
+            <button
+              type="button"
+              onClick={onNewSubcontract}
+              style={{
+                height: '36px',
+                padding: '0 16px',
+                borderRadius: '8px',
+                fontWeight: 700,
+                background: '#170e5e',
+                color: '#ffffff',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 'var(--font-body)',
+              }}
+            >
+              {t('contracting.contracting_subcontracts_tab.s20', "إسناد أعمال جديد")}
+            </button>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
+              <colgroup>
+                <col style={{ width: '170px' }} />
+                <col style={{ width: '220px' }} />
+                <col style={{ width: '125px' }} />
+                <col style={{ width: '125px' }} />
+                <col style={{ width: '125px' }} />
+                <col style={{ width: '95px' }} />
+                <col style={{ width: '85px' }} />
+                <col style={{ width: '230px' }} />
+              </colgroup>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                  <th style={{ padding: '12px 14px', fontSize: 'var(--font-table-head)', fontWeight: 700, color: '#334155' }}>{t('contracting.contracting_subcontracts_tab.s21', "رقم العقد ومقاول الباطن")}</th>
+                  <th style={{ padding: '12px 14px', fontSize: 'var(--font-table-head)', fontWeight: 700, color: '#334155' }}>{t('contracting.contracting_subcontracts_tab.s22', "نطاق الأعمال المسندة")}</th>
+                  <th style={{ padding: '12px 14px', fontSize: 'var(--font-table-head)', fontWeight: 700, color: '#334155' }}>{t('contracting.contracting_subcontracts_tab.s23', "القيمة التعاقدية")}</th>
+                  <th style={{ padding: '12px 14px', fontSize: 'var(--font-table-head)', fontWeight: 700, color: '#334155' }}>{t('contracting.contracting_subcontracts_tab.s24', "المستخلص حتى الآن")}</th>
+                  <th style={{ padding: '12px 14px', fontSize: 'var(--font-table-head)', fontWeight: 700, color: '#334155' }}>{t('contracting.contracting_subcontracts_tab.s25', "المتبقي من الالتزام")}</th>
+                  <th style={{ padding: '12px 14px', fontSize: 'var(--font-table-head)', fontWeight: 700, color: '#334155' }}>{t('contracting.contracting_subcontracts_tab.s26', "ضمان الأعمال")}</th>
+                  <th style={{ padding: '12px 14px', fontSize: 'var(--font-table-head)', fontWeight: 700, color: '#334155' }}>{t('contracting.contracting_subcontracts_tab.s27', "الحالة")}</th>
+                  <th style={{ padding: '12px 14px', fontSize: 'var(--font-table-head)', fontWeight: 700, color: '#334155', textAlign: 'center' }}>{t('contracting.contracting_subcontracts_tab.s28', "إجراءات")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subcontracts.map((sc) => {
+                  const remaining =
+                    sc.remainingCommitment !== undefined
+                      ? Number(sc.remainingCommitment)
+                      : Math.max(0, Number(sc.totalAmount || 0) - Number(sc.totalInvoiced || 0));
+                  return (
+                    <tr key={sc.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 14px', fontSize: 'var(--font-body)', fontWeight: 700, color: '#1e293b' }}>
+                        <div>{sc.contractNumber}</div>
+                        {sc.subcontractorName && (
+                          <div style={{ fontSize: 'var(--font-micro)', color: '#2563eb', fontWeight: 600 }}>
+                            {sc.subcontractorName}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontSize: 'var(--font-body)', maxWidth: '280px' }}>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{sc.scopeOfWork}</div>
+                        {sc.notes && (
+                          <div style={{ fontSize: 'var(--font-micro)', color: '#64748b', marginTop: '2px' }}>
+                            {sc.notes}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontSize: 'var(--font-body)', fontWeight: 700, color: '#0f172a' }}>
+                        {Number(sc.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencySymbol}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontSize: 'var(--font-body)', fontWeight: 600, color: '#2563eb' }}>
+                        {Number(sc.totalInvoiced || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencySymbol}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontSize: 'var(--font-body)', fontWeight: 700, color: remaining > 0 ? '#15803d' : '#64748b' }}>
+                        {remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })} {currencySymbol}
+                      </td>
+                      <td style={{ padding: '12px 14px', fontSize: 'var(--font-body)', color: '#a16207', fontWeight: 600 }}>
+                        {sc.retentionPercent}%
+                        {Number(sc.totalRetentionHeld || 0) > 0 && (
+                          <div style={{ fontSize: 'var(--font-micro)', color: '#b45309' }}>
+                            ({Number(sc.totalRetentionHeld).toLocaleString('en-US', { minimumFractionDigits: 2 })})
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 14px' }}>
+                        {getStatusBadge(sc.status)}
+                      </td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {project && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSubcontractForIpc(sc)}
+                              title={t('contracting.contracting_subcontracts_tab.s29', "إصدار مستخلص باطن (IPC)")}
+                              style={{
+                                height: '28px',
+                                padding: '0 8px',
+                                borderRadius: '6px',
+                                fontSize: 'var(--font-badge)',
+                                fontWeight: 600,
+                                background: '#170e5e',
+                                color: '#ffffff',
+                                border: 'none',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                            >
+                              <AppIcons.Receipt size={13} />
+                              <span>{t('contracting.contracting_subcontracts_tab.s30', "مستخلص")}</span>
+                            </button>
+                          )}
+                          {sc.subcontractorId ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedLedgerSubId(sc.subcontractorId)}
+                                title={t('contracting.contracting_subcontracts_tab.s31', "كشف حساب مقاول الباطن وموقف المستحقات")}
+                                style={{
+                                  height: '28px',
+                                  padding: '0 8px',
+                                  borderRadius: '6px',
+                                  fontSize: 'var(--font-badge)',
+                                  fontWeight: 600,
+                                  background: '#eff6ff',
+                                  color: '#1d4ed8',
+                                  border: '1px solid #bfdbfe',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <AppIcons.FileText size={13} />
+                                <span>{t('contracting.contracting_subcontracts_tab.s32', "كشف حساب")}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedPaymentSubId(sc.subcontractorId);
+                                  setIsPaymentModalOpen(true);
+                                }}
+                                title={t('contracting.contracting_subcontracts_tab.s33', "صرف دفعة نقدية أو تحويل لمقاول الباطن")}
+                                style={{
+                                  height: '28px',
+                                  padding: '0 8px',
+                                  borderRadius: '6px',
+                                  fontSize: 'var(--font-badge)',
+                                  fontWeight: 600,
+                                  background: '#ecfdf5',
+                                  color: '#047857',
+                                  border: '1px solid #a7f3d0',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <AppIcons.CreditCard size={13} />
+                                <span>{t('contracting.contracting_subcontracts_tab.s34', "صرف دفعة")}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedSubcontractIdForGuarantees(sc.id);
+                                  setIsGuaranteesDirectoryOpen(true);
+                                }}
+                                title={t('contracting.contracting_subcontracts_tab.s35', "خطابات الضمان البنكية للعقد (G1)")}
+                                style={{
+                                  height: '28px',
+                                  padding: '0 8px',
+                                  borderRadius: '6px',
+                                  fontSize: 'var(--font-badge)',
+                                  fontWeight: 600,
+                                  background: '#eff6ff',
+                                  color: '#1e40af',
+                                  border: '1px solid #bfdbfe',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                <AppIcons.ShieldCheck size={13} />
+                                <span>{t('contracting.contracting_subcontracts_tab.s36', "الضمانات")}</span>
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* مودال سجل ضمان الأعمال المحتجز */}
+      {isRetentionModalOpen && (
+        <RetentionLedgerModal
+          isOpen={isRetentionModalOpen}
+          onClose={() => setIsRetentionModalOpen(false)}
+          projectId={projectId}
+          projectName={projectName}
+        />
+      )}
+
+      {/* مودال حجز الدفعات للملاحظات الفنية */}
+      {isPaymentHoldsOpen && (
+        <PaymentHoldsModal
+          isOpen={isPaymentHoldsOpen}
+          onClose={() => setIsPaymentHoldsOpen(false)}
+          projectId={projectId}
+          projectName={projectName}
+        />
+      )}
+
+      {/* مودال إصدار مستخلص لمقاول الباطن */}
+      {selectedSubcontractForIpc && project && (
+        <CreateIpcInvoiceModal
+          open={Boolean(selectedSubcontractForIpc)}
+          project={project}
+          initialIpcType="subcontractor"
+          initialSubcontractId={selectedSubcontractForIpc.id}
+          onClose={() => setSelectedSubcontractForIpc(null)}
+          onCreated={() => {
+            setSelectedSubcontractForIpc(null);
+            onRefresh?.();
+          }}
+        />
+      )}
+
+      {/* مودال دليل وسجل مقاولي الباطن */}
+      {isSubcontractorsDirectoryOpen && (
+        <SubcontractorsDirectoryModal
+          open={isSubcontractorsDirectoryOpen}
+          projectId={projectId}
+          onClose={() => setIsSubcontractorsDirectoryOpen(false)}
+          onChanged={() => onRefresh?.()}
+        />
+      )}
+
+      {/* مودال كشف حساب مقاول الباطن */}
+      {selectedLedgerSubId && (
+        <SubcontractorLedgerModal
+          open={Boolean(selectedLedgerSubId)}
+          subcontractorId={selectedLedgerSubId}
+          initialProjectId={projectId}
+          onClose={() => setSelectedLedgerSubId(null)}
+        />
+      )}
+
+      {/* مودال صرف دفعة لمقاول الباطن */}
+      {isPaymentModalOpen && (
+        <RecordSubcontractorPaymentModal
+          open={isPaymentModalOpen}
+          initialSubcontractorId={selectedPaymentSubId || undefined}
+          projectId={projectId}
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            setSelectedPaymentSubId(null);
+          }}
+          onSuccess={() => {
+            setIsPaymentModalOpen(false);
+            setSelectedPaymentSubId(null);
+            onRefresh?.();
+          }}
+        />
+      )}
+
+      {/* مودال سجل خطابات الضمان البنكية والبوابة الرقابية G1 */}
+      {isGuaranteesDirectoryOpen && projectId && (
+        <GuaranteesDirectoryModal
+          open={isGuaranteesDirectoryOpen}
+          projectId={projectId}
+          projectName={projectName}
+          subcontractId={selectedSubcontractIdForGuarantees}
+          onClose={() => {
+            setIsGuaranteesDirectoryOpen(false);
+            setSelectedSubcontractIdForGuarantees(undefined);
+          }}
+          onChanged={() => {
+            onRefresh?.();
+          }}
+        />
+      )}
+    </div>
+  );
+}

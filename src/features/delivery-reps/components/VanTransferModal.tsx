@@ -1,0 +1,513 @@
+import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
+import { StandardDialog } from '@/shared/components/StandardDialog';
+import { Button } from '@/shared/ui/button';
+import { CustomSelect } from '@/shared/ui/custom-select';
+import { toast } from '@/shared/components/system-alert';
+import { vanSalesApi, VanStockItem, InterVanTransferRecord } from '../api/van-sales.api';
+import { ClockIcon } from '@/shared/components/icons/AppIcons';
+
+interface PeerRep {
+  id: number;
+  name: string;
+  phone?: string;
+  vehiclePlate?: string;
+}
+
+interface VanTransferModalProps {
+  open: boolean;
+  onClose: () => void;
+  inventory: VanStockItem[];
+  peerReps: PeerRep[];
+  transfers: InterVanTransferRecord[];
+  onRefreshTransfers: () => void;
+  onRefreshInventory: () => void;
+}
+
+export const VanTransferModal: React.FC<VanTransferModalProps> = ({
+  open,
+  onClose,
+  inventory,
+  peerReps,
+  transfers,
+  onRefreshTransfers,
+  onRefreshInventory,
+}) => {
+  const { t: __t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<'incoming' | 'create' | 'history'>('incoming');
+
+  // Create transfer form state
+  const [selectedRepId, setSelectedRepId] = useState<number | ''>('');
+  const [selectedProductId, setSelectedProductId] = useState<number | ''>('');
+  const [transferQty, setTransferQty] = useState<string>('');
+  const [transferItems, setTransferItems] = useState<Array<{ productId: number; productName: string; qty: number }>>([]);
+  const [transferNotes, setTransferNotes] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Incoming transfers pending
+  const incomingPending = transfers.filter((t) => t.status === 'pending');
+
+  const handleAddItem = () => {
+    if (!selectedProductId) return;
+    const qty = parseFloat(transferQty);
+    if (!qty || qty <= 0) {
+      toast.warning('يرجى تحديد كمية صحيحة');
+      return;
+    }
+
+    const item = inventory.find((i) => i.productId === selectedProductId);
+    if (!item) return;
+
+    if (qty > item.qty) {
+      toast.warning(`الكمية المطلوبة (${qty}) تتجاوز المتوفر بسيارتك (${item.qty})`);
+      return;
+    }
+
+    setTransferItems((prev) => {
+      const existing = prev.find((it) => it.productId === item.productId);
+      if (existing) {
+        return prev.map((it) => (it.productId === item.productId ? { ...it, qty: it.qty + qty } : it));
+      }
+      return [...prev, { productId: item.productId, productName: item.productName, qty }];
+    });
+
+    setSelectedProductId('');
+    setTransferQty('');
+  };
+
+  const handleRemoveItem = (productId: number) => {
+    setTransferItems((prev) => prev.filter((it) => it.productId !== productId));
+  };
+
+  const handleCreateTransfer = async () => {
+    if (!selectedRepId) {
+      toast.warning('يرجى اختيار المندوب المستلم');
+      return;
+    }
+    if (transferItems.length === 0) {
+      toast.warning('يرجى إضافة صنف واحد على الأقل للتحويل');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await vanSalesApi.createDriverTransfer({
+        toRepId: selectedRepId,
+        items: transferItems.map((it) => ({ productId: it.productId, qty: it.qty })),
+        notes: transferNotes.trim() || undefined,
+      });
+
+      toast.success(`تم إنشاء إذن التحويل (#${res.transferNo}) بنجاح! بانتظار موافقة واستلام الزميل.`);
+      setTransferItems([]);
+      setSelectedRepId('');
+      setTransferNotes('');
+      onRefreshTransfers();
+      setActiveTab('incoming');
+    } catch (err: any) {
+      toast.error(err?.message || 'تعذر إرسال طلب التحويل');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAcceptTransfer = async (transferId: number) => {
+    try {
+      await vanSalesApi.acceptDriverTransfer(transferId);
+      toast.success('تم قبول التحويل بنجاح ونقل الأصناف إلى رصيد سيارتك!');
+      onRefreshTransfers();
+      onRefreshInventory();
+    } catch (err: any) {
+      toast.error(err?.message || 'تعذر قبول التحويل');
+    }
+  };
+
+  const handleRejectTransfer = async (transferId: number) => {
+    try {
+      await vanSalesApi.rejectDriverTransfer(transferId, 'رفض بواسطة المندوب المستلم');
+      toast.info('تم رفض طلب التحويل');
+      onRefreshTransfers();
+    } catch (err: any) {
+      toast.error(err?.message || 'تعذر رفض التحويل');
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <StandardDialog
+      open={open}
+      onClose={onClose}
+      title={__t('delivery_reps.van_transfer_modal.s0', __t('delivery_reps.van_transfer_modal.s0', "مناقلة بضاعة بين سيارتين بالميدان"))}
+      subtitle={__t('delivery_reps.van_transfer_modal.s1', __t('delivery_reps.van_transfer_modal.s1', "تحويل بضاعة فوري بين المناديب في الشارع بموافقة الطرفين"))}
+      compact
+      minHeight="auto"
+      width="min(480px, 94vw)"
+      footerActions={
+        <Button variant="secondary" onClick={onClose} style={{ height: '34px', fontSize: '12px' }}>
+          {__t('delivery_reps.van_transfer_modal.s2', __t('delivery_reps.van_transfer_modal.s2', "إغلاق"))}
+        </Button>
+      }
+    >
+      <div dir="rtl" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* Tab Buttons (3 in 1 Row without cut-off) */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: '#f1f5f9',
+            padding: '3px',
+            borderRadius: '8px',
+            gap: '4px',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab('incoming')}
+            style={{
+              flex: '1 1 0',
+              minWidth: 0,
+              padding: '6px 4px',
+              border: 'none',
+              borderRadius: '6px',
+              backgroundColor: activeTab === 'incoming' ? '#ffffff' : 'transparent',
+              color: activeTab === 'incoming' ? '#170e5e' : '#64748b',
+              fontWeight: 800,
+              fontSize: '11.5px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              textAlign: 'center',
+              boxShadow: activeTab === 'incoming' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            {__t('delivery_reps.van_transfer_modal.s3', __t('delivery_reps.van_transfer_modal.s3', "الواردة"))} {incomingPending.length > 0 ? `(${incomingPending.length})` : ''}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('create')}
+            style={{
+              flex: '1 1 0',
+              minWidth: 0,
+              padding: '6px 4px',
+              border: 'none',
+              borderRadius: '6px',
+              backgroundColor: activeTab === 'create' ? '#ffffff' : 'transparent',
+              color: activeTab === 'create' ? '#170e5e' : '#64748b',
+              fontWeight: 800,
+              fontSize: '11.5px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              textAlign: 'center',
+              boxShadow: activeTab === 'create' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            {__t('delivery_reps.van_transfer_modal.s4', __t('delivery_reps.van_transfer_modal.s4', "+ تحويل جديد"))}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('history')}
+            style={{
+              flex: '1 1 0',
+              minWidth: 0,
+              padding: '6px 4px',
+              border: 'none',
+              borderRadius: '6px',
+              backgroundColor: activeTab === 'history' ? '#ffffff' : 'transparent',
+              color: activeTab === 'history' ? '#170e5e' : '#64748b',
+              fontWeight: 800,
+              fontSize: '11.5px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              textAlign: 'center',
+              boxShadow: activeTab === 'history' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+            }}
+          >
+            {__t('delivery_reps.van_transfer_modal.s5', __t('delivery_reps.van_transfer_modal.s5', "السجل ("))}{transfers.length})
+          </button>
+        </div>
+
+        {/* TAB 1: Incoming Pending Transfers */}
+        {activeTab === 'incoming' && (
+          <div>
+            {incomingPending.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 10px', color: '#94a3b8', fontSize: '12.5px', border: '1px dashed #cbd5e1', borderRadius: '10px' }}>
+                {__t('delivery_reps.van_transfer_modal.s6', __t('delivery_reps.van_transfer_modal.s6', "لا توجد طلبات تحويل واردة بانتظار موافقتك حالياً"))}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {incomingPending.map((tr) => (
+                  <div
+                    key={tr.id}
+                    style={{
+                      backgroundColor: '#ffffff',
+                      borderRadius: '10px',
+                      border: '1.5px solid #93c5fd',
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 800, color: '#0369a1' }}>
+                          #{tr.transferNo}
+                        </span>
+                        <h4 style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
+                          {__t('delivery_reps.van_transfer_modal.s7', __t('delivery_reps.van_transfer_modal.s7', "محول من المندوب:"))} {tr.fromRepName}
+                        </h4>
+                      </div>
+                      <span
+                        style={{
+                          backgroundColor: '#fef3c7',
+                          color: '#b45309',
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid #fde68a',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        <ClockIcon size={12} color="#b45309" />
+                        <span>{__t('delivery_reps.van_transfer_modal.s8', __t('delivery_reps.van_transfer_modal.s8', "بانتظار تأكيدك"))}</span>
+                      </span>
+                    </div>
+
+                    {/* Items table */}
+                    <div style={{ backgroundColor: '#f8fafc', borderRadius: '6px', padding: '8px', fontSize: '11.5px' }}>
+                      <span style={{ color: '#64748b', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
+                        {__t('delivery_reps.van_transfer_modal.s9', __t('delivery_reps.van_transfer_modal.s9', "الأصناف المحولة:"))}
+                      </span>
+                      {tr.items.map((it) => (
+                        <div key={it.productId} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+                          <span>{it.productName}</span>
+                          <strong style={{ color: '#0f172a' }}>{it.qty} {__t('delivery_reps.van_transfer_modal.s10', __t('delivery_reps.van_transfer_modal.s10', "قطعة"))}</strong>
+                        </div>
+                      ))}
+                    </div>
+
+                    {tr.notes && (
+                      <span style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic' }}>
+                        {__t('delivery_reps.van_transfer_modal.s11', __t('delivery_reps.van_transfer_modal.s11', "ملاحظة: \""))}{tr.notes}"
+                      </span>
+                    )}
+
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                      <Button
+                        variant="primary"
+                        onClick={() => handleAcceptTransfer(tr.id)}
+                        style={{ flex: 1, backgroundColor: '#15803d', color: '#ffffff', fontSize: '12px', fontWeight: 800, height: '32px' }}
+                      >
+                        {__t('delivery_reps.van_transfer_modal.s12', __t('delivery_reps.van_transfer_modal.s12', "✓ استلام وتأكيد البضاعة"))}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleRejectTransfer(tr.id)}
+                        style={{ fontSize: '12px', color: '#dc2626', borderColor: '#fca5a5', height: '32px' }}
+                      >
+                        {__t('delivery_reps.van_transfer_modal.s13', __t('delivery_reps.van_transfer_modal.s13', "رفض"))}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: Create New Transfer */}
+        {activeTab === 'create' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
+                {__t('delivery_reps.van_transfer_modal.s14', __t('delivery_reps.van_transfer_modal.s14', "المندوب الزميل المستلم:"))}
+              </label>
+              <CustomSelect
+                value={selectedRepId ? String(selectedRepId) : ''}
+                onChange={(val) => setSelectedRepId(val ? Number(val) : '')}
+                options={[
+                  { value: '', label: __t('delivery_reps.van_transfer_modal.s15', __t('delivery_reps.van_transfer_modal.s15', "-- اختر المندوب المستلم --")) },
+                  ...peerReps.map((r) => ({
+                    value: String(r.id),
+                    label: `${r.name}${r.vehiclePlate ? ` (${r.vehiclePlate})` : ''}`,
+                  })),
+                ]}
+                placeholder={__t('delivery_reps.van_transfer_modal.s16', __t('delivery_reps.van_transfer_modal.s16', "اختر المندوب"))}
+              />
+            </div>
+
+            {/* Product & Qty Picker */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
+                  {__t('delivery_reps.van_transfer_modal.s17', __t('delivery_reps.van_transfer_modal.s17', "الصنف من سيارتك:"))}
+                </label>
+                <CustomSelect
+                  value={selectedProductId ? String(selectedProductId) : ''}
+                  onChange={(val) => setSelectedProductId(val ? Number(val) : '')}
+                  options={[
+                    { value: '', label: __t('delivery_reps.van_transfer_modal.s18', __t('delivery_reps.van_transfer_modal.s18', "-- اختر الصنف --")) },
+                    ...inventory
+                      .filter((i) => i.qty > 0)
+                      .map((i) => ({
+                        value: String(i.productId),
+                        label: `${i.productName} (متوفر: ${i.qty})`,
+                      })),
+                  ]}
+                  placeholder={__t('delivery_reps.van_transfer_modal.s19', __t('delivery_reps.van_transfer_modal.s19', "اختر الصنف"))}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
+                    {__t('delivery_reps.van_transfer_modal.s20', __t('delivery_reps.van_transfer_modal.s20', "الكمية المحولة:"))}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={transferQty}
+                    onChange={(e) => setTransferQty(e.target.value)}
+                    placeholder={__t('delivery_reps.van_transfer_modal.s21', __t('delivery_reps.van_transfer_modal.s21', "الكمية..."))}
+                    style={{
+                      width: '100%',
+                      height: '36px',
+                      padding: '0 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleAddItem}
+                  style={{
+                    height: '36px',
+                    padding: '0 14px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    backgroundColor: '#f1f5f9',
+                  }}
+                >
+                  {__t('delivery_reps.van_transfer_modal.s22', __t('delivery_reps.van_transfer_modal.s22', "+ إضافة الصنف"))}
+                </Button>
+              </div>
+            </div>
+
+            {/* Items List */}
+            {transferItems.length > 0 && (
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                {transferItems.map((it) => (
+                  <div
+                    key={it.productId}
+                    style={{
+                      padding: '8px 10px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      backgroundColor: '#ffffff',
+                      borderBottom: '1px solid #f1f5f9',
+                      fontSize: '12px',
+                    }}
+                  >
+                    <span>{it.productName}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <strong style={{ color: '#0f172a' }}>{it.qty} {__t('delivery_reps.van_transfer_modal.s23', __t('delivery_reps.van_transfer_modal.s23', "قطعة"))}</strong>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(it.productId)}
+                        style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800 }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div>
+              <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#334155', marginBottom: '3px' }}>
+                {__t('delivery_reps.van_transfer_modal.s24', __t('delivery_reps.van_transfer_modal.s24', "ملاحظات التحويل:"))}
+              </label>
+              <input
+                type="text"
+                value={transferNotes}
+                onChange={(e) => setTransferNotes(e.target.value)}
+                placeholder={__t('delivery_reps.van_transfer_modal.s25', __t('delivery_reps.van_transfer_modal.s25', "سبب التحويل أو موقع اللقاء..."))}
+                style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleCreateTransfer}
+              disabled={isSubmitting || transferItems.length === 0 || !selectedRepId}
+              style={{ backgroundColor: '#170e5e', color: '#ffffff', height: '38px', fontSize: '13px', fontWeight: 800, marginTop: '4px' }}
+            >
+              {isSubmitting ? __t('delivery_reps.van_transfer_modal.s26', __t('delivery_reps.van_transfer_modal.s26', "جاري الإرسال...")) : __t('delivery_reps.van_transfer_modal.s27', __t('delivery_reps.van_transfer_modal.s27', "إرسال طلب التحويل للزميل"))}
+            </Button>
+          </div>
+        )}
+
+        {/* TAB 3: History */}
+        {activeTab === 'history' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {transfers.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px 10px', color: '#94a3b8', fontSize: '12px' }}>
+                {__t('delivery_reps.van_transfer_modal.s28', __t('delivery_reps.van_transfer_modal.s28', "لا توجد تحويلات سابقة"))}
+              </div>
+            ) : (
+              transfers.map((tr) => (
+                <div
+                  key={tr.id}
+                  style={{
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    border: '1px solid #e2e8f0',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: '12px',
+                  }}
+                >
+                  <div>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#170e5e' }}>#{tr.transferNo}</span>
+                    <span style={{ color: '#64748b' }}> ({tr.fromRepName} ➔ {tr.toRepName})</span>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                      {tr.totalItemsCount} {__t('delivery_reps.van_transfer_modal.s29', __t('delivery_reps.van_transfer_modal.s29', "أصناف | إجمالي الكمية:"))} {tr.totalQty}
+                    </div>
+                  </div>
+
+                  <div>
+                    {tr.status === 'accepted' ? (
+                      <span style={{ color: '#16a34a', fontWeight: 800, fontSize: '11px' }}>{__t('delivery_reps.van_transfer_modal.s30', __t('delivery_reps.van_transfer_modal.s30', "✓ تم الاستلام"))}</span>
+                    ) : tr.status === 'rejected' ? (
+                      <span style={{ color: '#dc2626', fontWeight: 800, fontSize: '11px' }}>{__t('delivery_reps.van_transfer_modal.s31', __t('delivery_reps.van_transfer_modal.s31', "✕ مرفوض"))}</span>
+                    ) : (
+                      <span style={{ color: '#d97706', fontWeight: 800, fontSize: '11px' }}>{__t('delivery_reps.van_transfer_modal.s32', __t('delivery_reps.van_transfer_modal.s32', "⏳ معلق"))}</span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    </StandardDialog>
+  );
+};

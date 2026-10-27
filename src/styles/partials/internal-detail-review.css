@@ -1,0 +1,1043 @@
+/* Final internal detail review on latest frontend snapshot */
+
+/* Dashboard: tighten internals without removing hero/spotlight */
+.dashboard-premium-shell .dashboard-content-grid,
+.dashboard-premium-shell .dashboard-content-grid-wide,
+.dashboard-premium-shell .dashboard-premium-stats-grid {
+  gap: 12px;
+  align-items: start;
+}
+
+.dashboard-premium-shell .dashboard-card-compact,
+.dashboard-premium-shell .dashboard-trend-card,
+.dashboard-premium-shell .dashboard-side-card {
+  min-height: 0;
+  padding: 14px;
+}
+
+.dashboard-premium-shell .dashboard-card-compact .section-title,
+.dashboard-premium-shell .dashboard-trend-card .section-title,
+.dashboard-premium-shell .dashboard-side-card .section-title {
+  margin-bottom: 10px;
+}
+
+.dashboard-premium-shell .dashboard-card-compact .metric-list,
+.dashboard-premium-shell .dashboard-card-compact .list-stack,
+.dashboard-premium-shell .dashboard-trend-card .list-stack,
+.dashboard-premium-shell .dashboard-side-card .dashboard-actions-grid-premium {
+  gap: 8px;
+}
+
+.dashboard-premium-shell .dashboard-card-compact .metric-row,
+.dashboard-premium-shell .dashboard-card-compact .list-row,
+.dashboard-premium-shell .dashboard-trend-card .list-row,
+.dashboard-premium-shell .dashboard-side-card .dashboard-action-link {
+  padding: 9px 11px;
+  border-radius: 8px;
+}
+
+.dashboard-premium-shell .dashboard-side-card .dashboard-action-link {
+  min-height: 84px;
+}
+
+.dashboard-premium-shell .dashboard-premium-stats-grid .dashboard-metric-card,
+.dashboard-premium-shell .dashboard-hero-spotlight .dashboard-metric-card {
+  padding: 14px 16px;
+  border-radius: 8px;
+}
+
+.dashboard-premium-shell .dashboard-metric-copy strong {
+  font-size: 20px;
+}
+
+.dashboard-premium-shell .dashboard-content-grid-wide .dashboard-card-compact .list-stack,
+.dashboard-premium-shell .dashboard-content-grid .dashboard-trend-card .list-stack {
+  max-height: 340px;
+  overflow: auto;
+  padding-inline-end: 2px;
+}
+
+/* Settings internals */
+.settings-page-shell .settings-main-grid,
+.settings-page-shell .settings-diagnostics-grid,
+.settings-page-shell .two-column-grid {
+  align-items: start;
+  gap: 14px;
+}
+
+.settings-page-shell .settings-primary-card,
+.settings-page-shell .settings-admin-card,
+.settings-page-shell .settings-reference-card {
+  padding: 14px;
+}
+
+.settings-page-shell .settings-primary-card .section-title,
+.settings-page-shell .settings-admin-card .section-title,
+.settings-page-shell .settings-reference-card .section-title {
+  margin-bottom: 10px;
+}
+
+.settings-page-shell .settings-primary-card .section-description,
+.settings-page-shell .settings-admin-card .section-description,
+.settings-page-shell .settings-reference-card .section-description {
+  max-width: 58ch;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.settings-page-shell .settings-primary-card .form-grid,
+.settings-page-shell .settings-admin-card .form-grid,
+.settings-page-shell .settings-reference-card .form-grid {
+  gap: 10px;
+}
+
+.settings-page-shell .settings-users-quick-actions {
+  margin-bottom: 10px !important;
+}
+
+.settings-page-shell .settings-users-stats-grid,
+.settings-page-shell .settings-overview-grid,
+.settings-page-shell .settings-reference-stats {
+  gap: 10px;
+}
+
+.settings-page-shell .settings-users-stats-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.settings-page-shell .settings-users-stats-grid .stat-card,
+.settings-page-shell .settings-overview-grid .stat-card,
+.settings-page-shell .settings-reference-stats .stat-card {
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+
+.settings-page-shell .settings-users-stats-grid .stat-card span,
+.settings-page-shell .settings-overview-grid .stat-card span,
+.settings-page-shell .settings-reference-stats .stat-card span {
+  font-size: 11px;
+}
+
+.settings-page-shell .settings-users-stats-grid .stat-card strong,
+.settings-page-shell .settings-overview-grid .stat-card strong,
+.settings-page-shell .settings-reference-stats .stat-card strong {
+  margin-top: 6px;
+  font-size: 16px;
+}
+
+.settings-page-shell .settings-users-filters {
+  gap: 8px !important;
+  margin-bottom: 8px !important;
+}
+
+.settings-page-shell .settings-users-filters .actions.compact-actions,
+.settings-page-shell .settings-reference-card .actions.compact-actions,
+.settings-page-shell .settings-admin-card .actions.compact-actions,
+.settings-page-shell .settings-primary-card .actions.compact-actions {
+  gap: 6px;
+}
+
+.settings-page-shell .settings-reference-card .list-row,
+.settings-page-shell .settings-admin-card .list-row,
+.settings-page-shell .settings-primary-card .list-row,
+.settings-page-shell .bulk-toolbar {
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.settings-page-shell .toolbar-meta-pill {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+/* Accounts */
+.accounts-workspace .accounts-focus-grid {
+  align-items: start;
+  gap: 14px;
+}
+
+.accounts-workspace .accounts-focus-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.accounts-workspace .accounts-shortcuts-row,
+.accounts-workspace .accounts-focus-tabs {
+  margin-bottom: 0;
+}
+
+.accounts-workspace .card .section-description {
+  max-width: 52ch;
+}
+
+.accounts-workspace .inline-create-panel {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.accounts-workspace .inline-create-panel .inline-create-grid {
+  gap: 10px;
+}
+
+.accounts-workspace .inline-create-panel .actions {
+  justify-content: flex-start;
+}
+
+.accounts-workspace .stats-grid.compact-grid:not(.accounts-stats-grid) {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.accounts-workspace .stats-grid.compact-grid:not(.accounts-stats-grid) .stat-card {
+  min-height: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.accounts-workspace .stats-grid.compact-grid:not(.accounts-stats-grid) .stat-card span {
+  font-size: 11px;
+}
+
+.accounts-workspace .stats-grid.compact-grid:not(.accounts-stats-grid) .stat-card strong {
+  margin-top: 6px;
+  font-size: 15px;
+}
+
+.accounts-workspace .table-wrap {
+  margin-top: 10px;
+}
+
+/* Treasury */
+.treasury-workspace .treasury-primary-grid {
+  align-items: start;
+  gap: 14px;
+}
+
+.treasury-workspace .treasury-side-stack {
+  gap: 12px;
+}
+
+.treasury-workspace .treasury-primary-grid > .card,
+.treasury-workspace .treasury-side-stack > .card {
+  min-height: 0;
+}
+
+.treasury-workspace .card .section-description {
+  max-width: 52ch;
+}
+
+.treasury-workspace .metric-row,
+.treasury-workspace .list-row {
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.treasury-workspace .toolbar,
+.treasury-workspace .search-toolbar,
+.treasury-workspace .filter-chip-row {
+  margin-bottom: 10px;
+}
+
+.treasury-workspace .form-grid {
+  gap: 10px;
+}
+
+.treasury-workspace .actions.section-actions {
+  justify-content: flex-end;
+}
+
+/* Products */
+.products-workspace-page .workspace-grid-balanced {
+  gap: 14px;
+  align-items: start;
+}
+
+.products-workspace-page .workspace-panel {
+  min-height: 0;
+}
+
+.products-workspace-page .workspace-panel .section-description {
+  max-width: 58ch;
+}
+
+.products-workspace-page .page-header-actions {
+  gap: 6px;
+}
+
+.products-workspace-page .products-header-stats .workspace-stats-grid,
+.products-workspace-page .mini-stats-grid {
+  gap: 10px;
+}
+
+.products-workspace-page .mini-stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.products-workspace-page details {
+  padding: 12px !important;
+  border-radius: 8px;
+}
+
+.products-workspace-page details summary {
+  font-size: 14px;
+}
+
+.products-workspace-page .barcode-preview-panel {
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.products-workspace-page .list-row.stacked-row {
+  align-items: flex-start;
+}
+
+/* Purchases internals */
+.purchases-workspace .purchases-primary-grid {
+  gap: 14px;
+  align-items: start;
+}
+
+.purchases-workspace .purchase-composer-card .section-description {
+  max-width: 58ch;
+}
+
+.purchases-workspace .purchase-composer-form {
+  gap: 10px;
+}
+
+.purchases-workspace .purchase-composer-form .divider {
+  margin: 2px 0;
+}
+
+.purchases-workspace .purchase-totals-grid .stat-card {
+  min-height: 82px;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.purchases-workspace .purchase-totals-grid .stat-card span {
+  font-size: 11px;
+}
+
+.purchases-workspace .purchase-totals-grid .stat-card strong {
+  margin-top: 6px;
+  font-size: 15px;
+}
+
+.purchases-workspace .sticky-form-actions {
+  padding-top: 6px;
+}
+
+/* Returns internals */
+.returns-workspace .returns-layout-grid {
+  align-items: start;
+  gap: 14px;
+}
+
+.returns-workspace .returns-side-stack {
+  gap: 12px;
+}
+
+.returns-workspace .returns-create-card .form-grid {
+  gap: 10px;
+}
+
+.returns-workspace .returns-summary-card .metric-list,
+.returns-workspace .returns-detail-card .metric-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.returns-workspace .returns-summary-card .metric-row,
+.returns-workspace .returns-detail-card .metric-row {
+  min-height: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+}
+
+/* Reports internals */
+.reports-workspace .reports-focus-card,
+.reports-workspace .reports-executive-card,
+.reports-workspace .reports-breakdown-card,
+.reports-workspace .reports-motion-card {
+  padding: 14px;
+}
+
+.reports-workspace .reports-focus-card .section-description,
+.reports-workspace .reports-executive-card .section-description,
+.reports-workspace .reports-breakdown-card .section-description,
+.reports-workspace .reports-motion-card .section-description {
+  max-width: 58ch;
+  font-size: 12px;
+}
+
+.reports-workspace .reports-spotlight-grid {
+  gap: 10px;
+}
+
+.reports-workspace .report-metric-card {
+  padding: 14px;
+  border-radius: 8px;
+  min-height: 112px;
+}
+
+.reports-workspace .report-metric-helper {
+  min-height: 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.reports-workspace .report-metric-value {
+  font-size: 18px;
+}
+
+.reports-workspace .reports-metric-list .metric-row,
+.reports-workspace .list-row {
+  padding: 9px 11px;
+  border-radius: 8px;
+}
+
+.reports-workspace .toolbar-grid.compact-toolbar-grid,
+.reports-workspace .reports-range-grid--compact,
+.reports-workspace .reports-mini-overview-grid--compact {
+  gap: 10px;
+}
+
+.reports-workspace .reports-mini-overview-grid--compact .stat-card,
+.reports-workspace .reports-range-card--compact .report-mini-stat-card {
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.reports-workspace .reports-mini-overview-grid--compact .stat-card span,
+.reports-workspace .reports-range-card--compact .report-mini-stat-card span {
+  font-size: 11px;
+}
+
+.reports-workspace .reports-mini-overview-grid--compact .stat-card strong,
+.reports-workspace .reports-range-card--compact .report-mini-stat-card strong {
+  margin-top: 6px;
+  font-size: 15px;
+}
+
+@media (max-width: 1280px) {
+  .settings-page-shell .settings-users-stats-grid,
+  .accounts-workspace .stats-grid.compact-grid:not(.accounts-stats-grid) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .dashboard-premium-shell .dashboard-side-card .dashboard-actions-grid-premium,
+  .products-workspace-page .mini-stats-grid,
+  .returns-workspace .returns-summary-card .metric-list,
+  .returns-workspace .returns-detail-card .metric-list {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-page-shell .settings-users-stats-grid,
+  .accounts-workspace .stats-grid.compact-grid:not(.accounts-stats-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-page-shell .settings-users-stats-grid,
+  .accounts-workspace .stats-grid.compact-grid:not(.accounts-stats-grid),
+  .products-workspace-page .mini-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.products-workspace-page .products-row-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 320px;
+}
+
+.products-workspace-page .products-row-actions .btn {
+  min-width: 82px;
+}
+
+.products-workspace-page .barcode-label-preview-shell {
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(255,255,255,0.98));
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  padding: 14px;
+  overflow: auto;
+}
+
+/* Barcode Label Dialog & Preview Framework */
+.barcode-label-preview-shell {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.barcode-preview-sheet {
+  display: grid;
+  align-items: stretch;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+}
+
+.barcode-preview-sheet-thermal {
+  max-width: 314px;
+  width: 314px;
+  margin: 0 auto;
+  background: #f1f5f9;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+  padding: 12px 10px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 10px !important;
+  align-items: center;
+}
+
+.barcode-preview-thermal-item {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* Single High-Fidelity Sticker Preview */
+.barcode-preview-single-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.barcode-preview-single-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease;
+}
+
+.barcode-preview-single-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+/* Individual Barcode Label Card */
+.barcode-label-card {
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-align: center;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+.barcode-label-card.compact {
+  padding: 5px 6px;
+}
+
+.barcode-label-card.barcode-label-card-empty {
+  border: 1px dashed #e2e8f0;
+  background: #f8fafc;
+  opacity: 0.6;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+
+.barcode-label-card .barcode-label-header {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.barcode-label-card .barcode-label-store {
+  font-size: 9px;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  margin-bottom: 2px;
+  letter-spacing: 0.2px;
+}
+
+.barcode-label-card .barcode-label-name {
+  font-weight: 900;
+  color: #000000;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+}
+
+.barcode-label-card .barcode-label-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 0 0 auto;
+  margin: 2px 0;
+}
+
+.barcode-label-card .barcode-label-svg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+}
+
+.barcode-label-card .barcode-label-svg svg {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+.barcode-label-card .barcode-label-text {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #000000;
+  letter-spacing: 0.8px;
+  line-height: 1.1;
+  direction: ltr;
+  text-align: center;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+.barcode-label-card .barcode-label-bottom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 6px;
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px dotted #94a3b8;
+}
+
+.barcode-label-card .barcode-label-meta-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.barcode-label-card .barcode-label-unit-badge {
+  font-size: 9px;
+  font-weight: 800;
+  color: #000000;
+  background: #ffffff;
+  border: 1px solid #000000;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.barcode-label-card .barcode-label-sku {
+  font-size: 8.5px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.barcode-label-card .barcode-label-price {
+  font-size: 12.5px;
+  font-weight: 900;
+  color: #000000;
+  white-space: nowrap;
+  margin-inline-start: auto;
+}
+
+.barcode-label-card .barcode-label-missing {
+  font-size: 10px;
+  color: #b91c1c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/* Enhanced Single Sticker & Thermal Reel Presentation (WYSIWYG 1:1) */
+.barcode-preview-single-card .barcode-label-card,
+.barcode-preview-thermal-item .barcode-label-card {
+  border: none;
+  padding: 6px 10px;
+  background: #ffffff;
+  height: 100% !important;
+  width: 100% !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+.barcode-preview-single-card .barcode-label-store,
+.barcode-preview-thermal-item .barcode-label-store {
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  color: #475569;
+  margin-bottom: 2px;
+}
+
+.barcode-preview-single-card .barcode-label-name,
+.barcode-preview-thermal-item .barcode-label-name {
+  font-size: 15.5px !important;
+  font-weight: 900 !important;
+  color: #000000;
+  margin-bottom: 2px;
+}
+
+.barcode-preview-single-card .barcode-label-svg,
+.barcode-preview-thermal-item .barcode-label-svg {
+  height: 88px !important;
+  max-height: 92px !important;
+  margin: 3px 0 !important;
+}
+
+.barcode-preview-single-card .has-food-statement .barcode-label-svg,
+.barcode-preview-thermal-item .has-food-statement .barcode-label-svg {
+  height: 62px !important;
+  max-height: 65px !important;
+  margin: 2px 0 !important;
+}
+
+.barcode-preview-single-card .barcode-label-text,
+.barcode-preview-thermal-item .barcode-label-text {
+  font-size: 12.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 1.2px;
+  color: #000000;
+  margin-top: 2px;
+}
+
+.barcode-preview-single-card .barcode-label-bottom-row,
+.barcode-preview-thermal-item .barcode-label-bottom-row {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dotted #94a3b8;
+}
+
+.barcode-preview-single-card .barcode-label-unit-badge,
+.barcode-preview-thermal-item .barcode-label-unit-badge {
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  padding: 2px 7px !important;
+  background: #ffffff;
+  border: 1.5px solid #000000 !important;
+  color: #000000;
+}
+
+.barcode-preview-single-card .barcode-label-sku,
+.barcode-preview-thermal-item .barcode-label-sku {
+  font-size: 10px !important;
+  color: #334155;
+}
+
+.barcode-preview-single-card .barcode-label-price,
+.barcode-preview-thermal-item .barcode-label-price {
+  font-size: 19px !important;
+  font-weight: 900 !important;
+  color: #000000;
+}
+
+/* Live Preview Food Statement (بطاقة بيان التموين) */
+.barcode-label-card .barcode-label-food-statement {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 8.2px;
+  font-weight: 700;
+  color: #000000;
+  background: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 3px;
+  padding: 2px 5px;
+  margin: 2px 0;
+  line-height: 1.2;
+  direction: rtl;
+}
+
+.barcode-label-card .barcode-label-food-dates {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  color: #000000;
+}
+
+.barcode-label-card .barcode-label-food-dates span strong {
+  font-weight: 900;
+  color: #000000;
+}
+
+.barcode-label-card .barcode-label-storage-note {
+  font-size: 7.2px;
+  font-weight: 700;
+  color: #000000;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.barcode-preview-single-card .barcode-label-food-statement,
+.barcode-preview-thermal-item .barcode-label-food-statement {
+  font-size: 11.5px !important;
+  padding: 4px 8px !important;
+  gap: 3px !important;
+  margin: 4px 0 !important;
+  border: 1.5px solid #000000 !important;
+  border-radius: 4px !important;
+  background: #ffffff !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.barcode-preview-single-card .barcode-label-food-dates,
+.barcode-preview-thermal-item .barcode-label-food-dates {
+  gap: 8px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  color: #000000 !important;
+}
+
+.barcode-preview-single-card .barcode-label-food-dates span strong,
+.barcode-preview-thermal-item .barcode-label-food-dates span strong {
+  font-weight: 900 !important;
+  color: #000000 !important;
+}
+
+.barcode-preview-single-card .barcode-label-storage-note,
+.barcode-preview-thermal-item .barcode-label-storage-note {
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  color: #000000 !important;
+  line-height: 1.2 !important;
+}
+
+/* Live Preview Shelf Label (استيكر الرف التمويني) */
+.barcode-label-card.barcode-label-shelf {
+  text-align: start;
+}
+
+.barcode-label-card .barcode-shelf-product-name {
+  font-size: 11px;
+  font-weight: 900;
+  color: #0f172a;
+  white-space: normal;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.barcode-preview-single-card .barcode-shelf-product-name,
+.barcode-preview-thermal-item .barcode-shelf-product-name {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.barcode-label-card .barcode-shelf-main-content {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+  margin: 3px 0;
+}
+
+.barcode-label-card .barcode-shelf-price-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.barcode-label-card .barcode-shelf-price-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.barcode-label-card .barcode-shelf-price-amount {
+  font-size: 15px;
+  font-weight: 900;
+  color: #000000;
+  line-height: 1;
+}
+
+.barcode-preview-single-card .barcode-shelf-price-amount,
+.barcode-preview-thermal-item .barcode-shelf-price-amount {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.barcode-label-card .barcode-shelf-tax-note {
+  font-size: 7.5px;
+  font-weight: 700;
+  color: #475569;
+  margin-top: 2px;
+}
+
+.barcode-preview-single-card .barcode-shelf-tax-note,
+.barcode-preview-thermal-item .barcode-shelf-tax-note {
+  font-size: 9.5px;
+  color: #334155;
+}
+
+.barcode-label-card .barcode-shelf-unit-line {
+  font-size: 8px;
+  font-weight: 700;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.barcode-preview-single-card .barcode-shelf-unit-line,
+.barcode-preview-thermal-item .barcode-shelf-unit-line {
+  font-size: 10px;
+}
+
+.barcode-label-card .barcode-shelf-code-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+
+
+.products-workspace-page .fashion-group-editor {
+  gap: 14px;
+}
+
+.products-workspace-page .fashion-group-editor__intro {
+  padding: 14px;
+  border-radius: 8px;
+}
+
+.products-workspace-page .fashion-group-editor__badges,
+.products-workspace-page .fashion-group-editor__toolbar {
+  flex-wrap: wrap;
+}
+
+.products-workspace-page .fashion-group-editor__table-wrap {
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.products-workspace-page .fashion-group-editor__table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+.products-workspace-page .fashion-group-editor__table th,
+.products-workspace-page .fashion-group-editor__table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+  text-align: right;
+  vertical-align: middle;
+}
+
+.products-workspace-page .fashion-group-editor__table th {
+  background: #f8fafc;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.products-workspace-page .fashion-group-editor__table td input {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  .products-workspace-page .fashion-group-editor__table {
+    min-width: 560px;
+  }
+}
+
+.products-workspace-page table td {
+  vertical-align: middle;
+}
+
+.products-workspace-page .products-group-row {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.products-workspace-page .products-group-child-row td:first-child + td {
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.products-workspace-page .products-group-child-row strong {
+  font-size: 0.95rem;
+}

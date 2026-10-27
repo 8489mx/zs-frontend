@@ -1,0 +1,106 @@
+
+import { useEffect, useRef } from 'react';
+import { NavLink } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import { translateUiText } from '@/lib/auto-translator';
+import { settingsSections, type SettingsSectionKey } from '@/features/settings/pages/settings.page-config';
+import { demoDataApi } from '@/features/settings/api/demo-data.api';
+import { settingsApi } from '@/features/settings/api/settings.api';
+import { queryKeys } from '@/app/query-keys';
+import { useAuthStore } from '@/stores/auth-store';
+import { canAccessPath, isPlatformAdmin, isDesktopOfflineApp } from '@/app/router/access';
+import { prefetchRouteData } from '@/app/router/route-prefetch';
+import { resolveCurrentVertical, isRouteAllowedInVertical } from '@/shared/verticals/vertical-scope';
+
+export function SettingsSectionTabs({ currentSection, currentUserRole }: { currentSection: SettingsSectionKey; currentUserRole: string }) {
+  const { i18n } = useTranslation();
+  const isEn = i18n.language === 'en';
+  const isPrivilegedUser = currentUserRole === 'super_admin' || currentUserRole === 'admin';
+  const user = useAuthStore((state) => state.user);
+  const tenant = useAuthStore((state) => state.tenant);
+  const isPlatform = isPlatformAdmin(user);
+  const activeTabRef = useRef<HTMLAnchorElement | null>(null);
+
+  const { data: settings } = useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: () => settingsApi.settings(),
+    staleTime: 60_000,
+  });
+
+  const demoStatusQuery = useQuery({
+    queryKey: ['demo-data', 'status'],
+    queryFn: () => demoDataApi.getStatus(),
+    staleTime: 30_000,
+  });
+
+  const currentVertical = resolveCurrentVertical(tenant, settings);
+  const hasFeature = (feat: string) => isPlatform || Boolean(tenant?.features?.includes(feat));
+
+  const visibleSections = settingsSections.filter((section) => {
+    if ((section as any).hiddenInTabs) return false;
+    if (section.superAdminOnly && !isPlatform) return false;
+    if (section.adminOnly && !isPrivilegedUser) return false;
+    if (section.offlineOnly && !isDesktopOfflineApp()) return false;
+    if (section.cloudOnly && isDesktopOfflineApp()) return false;
+    if (section.requiredFeature && !hasFeature(section.requiredFeature)) return false;
+    if (section.requiredModule && !isPlatform && settings && !section.requiredModule(settings)) return false;
+    if (section.key === 'demo-data' && !isPlatform && demoStatusQuery.data && !demoStatusQuery.data.isEmpty) {
+      return false;
+    }
+    if (!isRouteAllowedInVertical(currentVertical, `settings/${section.key}`, settings)) return false;
+    if (!canAccessPath(user, `/settings/${section.key}`)) return false;
+    return true;
+  });
+
+  const getSectionLabels = (section: any) => {
+    if (section.key === 'reference') {
+      if (currentVertical === 'contracting') {
+        return { label: 'المقرات الإدارية ومواقع العمل والتشوين', shortLabel: 'مواقع العمل والتشوين' };
+      }
+    }
+    return { label: section.label, shortLabel: section.shortLabel || section.label };
+  };
+
+  const activeSectionKey =
+    currentSection === 'marketplaces' ? 'storefront' :
+    currentSection === 'daily-digest' ? 'whatsapp' :
+    currentSection;
+
+  useEffect(() => {
+    // scrollIntoView is missing in jsdom (component specs), so call it only when it exists.
+    if (activeTabRef.current?.scrollIntoView) {
+      activeTabRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  }, [activeSectionKey]);
+
+  return (
+    <div className="filter-chip-row toolbar-chip-row settings-section-tabs">
+      {visibleSections.map((section) => {
+        const isCurrentActive = activeSectionKey === section.key;
+        const labels = getSectionLabels(section);
+        const fullLabel = isEn ? (translateUiText(labels.label) || labels.label) : labels.label;
+        const shortLabel = isEn ? (translateUiText(labels.shortLabel) || labels.shortLabel) : labels.shortLabel;
+        return (
+          <NavLink
+            key={section.key}
+            ref={isCurrentActive ? activeTabRef : undefined}
+            to={`/settings/${section.key}`}
+            // Both labels are in the DOM (CSS picks one per screen size); the full label is the name.
+            aria-label={fullLabel}
+            onMouseEnter={() => prefetchRouteData(`/settings/${section.key}`)}
+            onTouchStart={() => prefetchRouteData(`/settings/${section.key}`)}
+            className={({ isActive }) => `btn ${isActive || isCurrentActive ? 'btn-primary' : 'btn-secondary'}`}
+          >
+            <span className="settings-tab-full-label">{fullLabel}</span>
+            <span className="settings-tab-short-label">{shortLabel}</span>
+          </NavLink>
+        );
+      })}
+    </div>
+  );
+}

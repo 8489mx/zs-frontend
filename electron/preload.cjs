@@ -1,0 +1,59 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+let runtimeConfig = { runtimeMode: 'standalone', port: 3001, apiBaseUrl: 'http://127.0.0.1:3001' };
+for (const arg of process.argv) {
+  if (arg.startsWith('--electron-runtime-config=')) {
+    try {
+      runtimeConfig = JSON.parse(arg.split('=')[1]);
+      if (runtimeConfig.runtimeMode === 'lan_client' && runtimeConfig.serverUrl) {
+        runtimeConfig.apiBaseUrl = runtimeConfig.serverUrl;
+      } else {
+        runtimeConfig.apiBaseUrl = `http://127.0.0.1:${runtimeConfig.port || 3001}`;
+      }
+    } catch (e) {
+      console.error('Failed to parse runtime config from args', e);
+    }
+  }
+}
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  getHardwareId: () => ipcRenderer.invoke('get-hardware-id'),
+  getSavedLicense: () => ipcRenderer.invoke('get-saved-license'),
+  saveLicenseKey: (key) => ipcRenderer.invoke('save-license-key', key),
+  openNewWindow: (routePath) => ipcRenderer.invoke('open-new-window', routePath)
+});
+
+contextBridge.exposeInMainWorld('electronRuntime', {
+  openNewWindow: (routePath) => ipcRenderer.invoke('open-new-window', routePath),
+  config: runtimeConfig,
+  getRuntimeConfig: () => ipcRenderer.invoke('get-runtime-config'),
+  clearAppCache: () => ipcRenderer.invoke('clear-app-cache'),
+  switchToStandalone: () => ipcRenderer.invoke('switch-to-standalone'),
+  switchToLanServer: () => ipcRenderer.invoke('switch-to-lan-server'),
+  switchToLanClient: (opts) => ipcRenderer.invoke('switch-to-lan-client', opts),
+  testLanServer: (opts) => ipcRenderer.invoke('test-lan-server', opts),
+  forceCloseApp: () => ipcRenderer.send('force-close-app'),
+  toggleFullScreen: () => ipcRenderer.invoke('toggle-fullscreen'),
+  getFullScreenState: () => ipcRenderer.invoke('get-fullscreen-state'),
+  setFullScreen: (flag) => ipcRenderer.invoke('set-fullscreen', flag),
+  onFullScreenChange: (callback) => {
+    const handler = (_event, isFullScreen) => callback(isFullScreen);
+    ipcRenderer.on('fullscreen-changed', handler);
+    return () => ipcRenderer.removeListener('fullscreen-changed', handler);
+  },
+  onShowCustomCloseDialog: (callback) => {
+    ipcRenderer.on('show-custom-close-dialog', callback);
+    return () => ipcRenderer.removeListener('show-custom-close-dialog', callback);
+  },
+  onBackendReady: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('backend-ready', handler);
+    return () => ipcRenderer.removeListener('backend-ready', handler);
+  }
+});
+
+contextBridge.exposeInMainWorld('electronPrinter', {
+  getPrinters: () => ipcRenderer.invoke('get-printers'),
+  printHtmlSilent: (opts) => ipcRenderer.invoke('print-html-silent', opts),
+  kickCashDrawer: (opts) => ipcRenderer.invoke('kick-cash-drawer', typeof opts === 'string' ? { deviceName: opts } : opts)
+});

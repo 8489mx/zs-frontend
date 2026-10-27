@@ -1,0 +1,148 @@
+import { useTranslation } from 'react-i18next';
+import { CurrencySymbol } from '@/shared/ui/currency-symbol';
+import { XIcon } from '@/shared/components/icons/AppIcons';
+import { useState, useEffect } from 'react';
+import { DialogShell } from '@/shared/components/dialog-shell';
+import { Button } from '@/shared/ui/button';
+import { pharmacyApi } from '../api/pharmacy.api';
+import type { PharmacyDrug } from '../types/pharmacy.types';
+import { IconPill, IconShield } from './PharmacyIcons';
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  activeIngredient: string;
+  strength?: string;
+  originalTradeName?: string;
+  onSelectSubstitute?: (drug: PharmacyDrug) => void;
+}
+
+export function GenericSubstitutesModal({
+  open,
+  onClose,
+  activeIngredient,
+  strength,
+  originalTradeName,
+  onSelectSubstitute,
+}: Props) {
+  const { t } = useTranslation();
+  const [substitutes, setSubstitutes] = useState<PharmacyDrug[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open && activeIngredient) {
+      setLoading(true);
+      pharmacyApi
+        .findSubstitutes(activeIngredient, strength)
+        .then((res) => setSubstitutes(res))
+        .catch(() => setSubstitutes([]))
+        .finally(() => setLoading(false));
+    }
+  }, [open, activeIngredient, strength]);
+
+  if (!open) return null;
+
+  return (
+    <DialogShell open={open} onClose={onClose} width="min(720px, 95vw)" ariaLabel={t('pharmacy.generic_substitutes_modal.s0', "بدائل ومثائل الدواء")}>
+      <div dir="rtl" style={{ background: '#ffffff', borderRadius: '10px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+              {t('pharmacy.generic_substitutes_modal.s1', "بدائل ومثائل الدواء (Generic Substitutes)")}
+            </h3>
+            <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+              {t('pharmacy.generic_substitutes_modal.s2', "المادة الفعالة:")} <strong style={{ color: 'var(--primary, #1e1b4b)' }}>{activeIngredient}</strong> {strength ? ('(' + strength + ')') : ''}
+              {originalTradeName ? (t('pharmacy.generic_substitutes_modal.s3', " • الدواء المطلوب: ") + originalTradeName) : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ border: 'none', background: '#f1f5f9', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontWeight: 700 }}
+          ><XIcon size={16} /></button>
+        </div>
+
+        <div style={{ maxHeight: '420px', overflowY: 'auto' }}>
+          {loading ? (
+            <div style={{ padding: '36px', textAlign: 'center', color: '#64748b' }}>{t('pharmacy.generic_substitutes_modal.s4', "جاري البحث عن البدائل والمثائل المتوفرة...")}</div>
+          ) : substitutes.length === 0 ? (
+            <div style={{ padding: '36px', textAlign: 'center', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+                <IconPill size={32} color="#94a3b8" />
+              </div>
+              <strong style={{ color: '#334155' }}>{t('pharmacy.generic_substitutes_modal.s5', "لم يتم العثور على بدائل مسجلة بنفس المادة الفعالة")}</strong>
+              <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+                {t('pharmacy.generic_substitutes_modal.s6', "يمكنك تسجيل بدائل أخرى من دليل الأدوية أو البحث بتركيز مختلف.")}
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {substitutes.map((drug) => (
+                <div
+                  key={drug.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 14px',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>{drug.trade_name}</strong>
+                      {drug.trade_name_ar && <span style={{ fontSize: '0.8rem', color: '#64748b' }}>({drug.trade_name_ar})</span>}
+                      {drug.controlled_level !== 'none' && (
+                        <span style={{ fontSize: '0.7rem', background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', padding: '1px 6px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <IconShield size={12} />
+                          <span>{t('pharmacy.generic_substitutes_modal.s7', "جدول أدوية")}</span>
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '3px' }}>
+                      {drug.dosage_form} • {drug.manufacturer || t('pharmacy.generic_substitutes_modal.s8', "شركة عامة")} • {drug.units_per_box} {drug.unit_name}{t('pharmacy.generic_substitutes_modal.s9', "/علبة")}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ textAlign: 'left' }}>
+                      <strong style={{ fontSize: '0.95rem', color: '#16a34a', display: 'block' }}>
+                        {Number(drug.box_price).toFixed(2)} <CurrencySymbol />
+                      </strong>
+                      {Number(drug.strip_price) > 0 && (
+                        <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                          {Number(drug.strip_price).toFixed(2)} <CurrencySymbol /> / {drug.unit_name}
+                        </span>
+                      )}
+                    </div>
+
+                    {onSelectSubstitute && (
+                      <Button
+                        variant="primary"
+                        className="btn-sm"
+                        onClick={() => {
+                          onSelectSubstitute(drug);
+                          onClose();
+                        }}
+                      >
+                        {t('pharmacy.generic_substitutes_modal.s10', "اختيار")}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+          <Button variant="secondary" onClick={onClose}>
+            {t('pharmacy.generic_substitutes_modal.s11', "إغلاق")}
+          </Button>
+        </div>
+      </div>
+    </DialogShell>
+  );
+}

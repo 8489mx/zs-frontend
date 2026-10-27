@@ -1,0 +1,176 @@
+import { useTranslation } from 'react-i18next';
+import React from 'react';
+import { Navigate, useParams } from 'react-router-dom';
+import { ActionConfirmDialog } from '@/shared/components/action-confirm-dialog';
+import { SettingsSectionContent } from '@/features/settings/pages/SettingsSectionContent';
+import { isSettingsSection, settingsSections, settingsStandaloneLinks, type SettingsSectionKey } from '@/features/settings/pages/settings.page-config';
+import { downloadJsonFile } from '@/lib/browser';
+import { SettingsPageShell } from '@/features/settings/components/SettingsPageShell';
+import { SettingsSectionErrorBoundary } from '@/features/settings/components/SettingsSectionErrorBoundary';
+import { downloadSettingsTemplate, exportSettingsData, getSettingsSectionDescription } from '@/features/settings/pages/settings-page.helpers';
+import { useSettingsPageController } from '@/features/settings/pages/useSettingsPageController';
+import type { BackupSnapshotRecord } from '@/features/settings/components/SettingsWorkspacePrimitives';
+import { useAuthStore } from '@/stores/auth-store';
+import { isPlatformAdmin, isDesktopOfflineApp } from '@/app/router/access';
+import { resolveCurrentVertical, isRouteAllowedInVertical } from '@/shared/verticals/vertical-scope';
+import { translateUiText } from '@/lib/auto-translator';
+
+export function SettingsPage() {
+  const { t, i18n } = useTranslation();
+  const isEn = i18n.language === 'en';
+  const { section } = useParams<{ section?: string }>();
+  const resolvedSection: SettingsSectionKey = isSettingsSection(section) ? section : 'core';
+  const page = useSettingsPageController(resolvedSection);
+  const { activeSetupSection, navigate, setupFlow, setupMode } = page;
+
+  React.useEffect(() => {
+    if (!setupMode || !activeSetupSection) return;
+    if (section === activeSetupSection) return;
+    if (section === 'overview') navigate(setupFlow.currentStep?.to || '/settings/core?setup=1', { replace: true });
+  }, [activeSetupSection, navigate, section, setupFlow.currentStep, setupMode]);
+
+  const sectionConfig = settingsSections.find(s => s.key === section) || settingsStandaloneLinks.find(s => s.to.endsWith(section || ''));
+  const currentUser = useAuthStore((state) => state.user);
+  const tenant = useAuthStore((state) => state.tenant);
+  const isPlatform = isPlatformAdmin(currentUser);
+
+  const hasFeature = (feat: string) => isPlatform || Boolean(tenant?.features?.includes(feat));
+  
+  if (!isSettingsSection(section) && !sectionConfig) return <Navigate to="/settings/core" replace />;
+  if (sectionConfig?.superAdminOnly && !isPlatform) return <Navigate to="/settings/core" replace />;
+  if (sectionConfig?.adminOnly && page.currentUserRole !== 'super_admin' && page.currentUserRole !== 'admin') return <Navigate to="/settings/core" replace />;
+  if (sectionConfig?.offlineOnly && !isDesktopOfflineApp()) return <Navigate to="/settings/core" replace />;
+  if (sectionConfig?.cloudOnly && isDesktopOfflineApp()) return <Navigate to="/settings/core" replace />;
+  if (sectionConfig?.requiredFeature && !hasFeature(sectionConfig.requiredFeature)) return <Navigate to="/settings/core" replace />;
+  if (sectionConfig?.requiredModule && !isPlatform && page.settings && !sectionConfig.requiredModule(page.settings)) return <Navigate to="/settings/core" replace />;
+  const currentVertical = resolveCurrentVertical(tenant, page.settings);
+  if (!isRouteAllowedInVertical(currentVertical, `settings/${resolvedSection}`, page.settings)) {
+    return <Navigate to="/settings/core" replace />;
+  }
+
+  return (
+    <SettingsPageShell
+      title={page.setupMode ? t('settings.settings_page.s0', "تهيئة البرنامج") : t('settings.settings_page.s1', "إعدادات النشاط")}
+      description={page.setupMode ? t('settings.settings_page.s2', "اتبع الخطوات بالترتيب حتى يصبح التشغيل الأول واضحًا وآمنًا.") : getSettingsSectionDescription(resolvedSection, currentVertical)}
+      badgeLabel={page.setupMode ? t('settings.settings_page.s3', "تجهيز البداية") : (isEn ? (translateUiText(page.sectionMeta.label) || page.sectionMeta.label) : page.sectionMeta.label)}
+      setupMode={page.setupMode}
+      currentSection={resolvedSection}
+      currentUserRole={page.currentUserRole}
+      cards={page.settingsGuidanceCards}
+    >
+      <SettingsSectionErrorBoundary sectionKey={resolvedSection}>
+        <SettingsSectionContent
+          section={resolvedSection}
+          currentUserRole={page.currentUserRole}
+          settings={page.settings}
+          branches={page.branches}
+          locations={page.locations}
+          filteredBranches={page.referenceFilters.filteredBranches}
+          filteredLocations={page.referenceFilters.filteredLocations}
+          branchSearch={page.referenceFilters.branchSearch}
+          locationSearch={page.referenceFilters.locationSearch}
+          branchFilter={page.referenceFilters.branchFilter}
+          locationFilter={page.referenceFilters.locationFilter}
+          setBranchSearch={page.referenceFilters.setBranchSearch}
+          setLocationSearch={page.referenceFilters.setLocationSearch}
+          setBranchFilter={page.referenceFilters.setBranchFilter}
+          setLocationFilter={page.referenceFilters.setLocationFilter}
+          resetBranchFilters={page.referenceFilters.resetBranchFilters}
+          resetLocationFilters={page.referenceFilters.resetLocationFilters}
+          copyVisibleBranches={page.copyVisibleBranches}
+          copyVisibleLocations={page.copyVisibleLocations}
+          settingsQuery={page.settingsQuery}
+          branchesQuery={page.branchesQuery}
+          locationsQuery={page.locationsQuery}
+          diagnosticsQuery={page.diagnosticsQuery}
+          maintenanceQuery={page.maintenanceQuery}
+          launchQuery={page.launchQuery}
+          uatQuery={page.uatQuery}
+          operationalQuery={page.operationalQuery}
+          supportQuery={page.supportQuery}
+          snapshots={page.snapshots}
+          canManageSettings={page.canManageSettings}
+          canManageBackups={page.canManageBackups}
+          canManageMaintenance={page.canManageMaintenance}
+          backupBusy={page.backupBusy}
+          backupConfigQuery={page.backupConfigQuery}
+          backupFolderPathDraft={page.backupFolderPathDraft}
+          setBackupFolderPathDraft={page.setBackupFolderPathDraft}
+          backupAutoEnabledDraft={page.backupAutoEnabledDraft}
+          setBackupAutoEnabledDraft={page.setBackupAutoEnabledDraft}
+          backupFrequencyDraft={page.backupFrequencyDraft}
+          setBackupFrequencyDraft={page.setBackupFrequencyDraft}
+          backupTimeDraft={page.backupTimeDraft}
+          setBackupTimeDraft={page.setBackupTimeDraft}
+          backupWeeklyDayDraft={page.backupWeeklyDayDraft}
+          setBackupWeeklyDayDraft={page.setBackupWeeklyDayDraft}
+          backupSelectedFileName={page.backupSelectedFileName}
+          backupMessage={page.backupMessage}
+          backupMessageKind={page.backupMessageKind}
+          backupResult={page.backupResult}
+          restoreSnapshotId={page.restoreSnapshotId}
+          handleBackupFile={page.handleBackupFile}
+          supportCopyStatus={page.supportCopyStatus}
+          diagnosticsCounts={page.diagnosticsCounts}
+          diagnosticsFinance={page.diagnosticsFinance}
+          maintenanceSummary={page.maintenanceSummary}
+          launchSummary={page.launchSummary}
+          uatSummary={page.uatSummary}
+          operationalSummary={page.operationalSummary}
+          supportData={page.supportData}
+          systemDiagnosticsPayload={page.diagnosticsQuery.data || {}}
+          cleanupPending={page.cleanupMutation.isPending}
+          reconcileCustomersPending={page.reconcileCustomersMutation.isPending}
+          reconcileSuppliersPending={page.reconcileSuppliersMutation.isPending}
+          reconcileAllPending={page.reconcileAllMutation.isPending}
+          importProductsPending={page.importProductsMutation.isPending}
+          importCustomersPending={page.importCustomersMutation.isPending}
+          importSuppliersPending={page.importSuppliersMutation.isPending}
+          importOpeningStockPending={page.importOpeningStockMutation.isPending}
+          handleBackupDownload={page.handleBackupDownload}
+          handleSupportBundleDownload={page.handleSupportBundleDownload}
+          saveBackupConfig={page.saveBackupConfig}
+          testBackupFolder={page.testBackupFolder}
+          saveBackupFileToFolderNow={page.saveBackupFileToFolderNow}
+          handleSnapshotDownload={(snapshot: BackupSnapshotRecord) => Promise.resolve(page.handleSnapshotDownload(snapshot))}
+          handleCopySupportSnapshot={page.handleCopySupportSnapshot}
+          onRequestRestoreFile={(file: File) => page.setConfirmAction({ kind: 'restore-file', file })}
+          onRequestRestoreSnapshot={(snapshot: BackupSnapshotRecord) => page.setConfirmAction({ kind: 'restore-snapshot', snapshot })}
+          onCleanupExpiredSessions={() => page.setConfirmAction({ kind: 'cleanup-expired-sessions' })}
+          onReconcileCustomers={() => page.setConfirmAction({ kind: 'reconcile-customers' })}
+          onReconcileSuppliers={() => page.setConfirmAction({ kind: 'reconcile-suppliers' })}
+          onReconcileAll={() => page.setConfirmAction({ kind: 'reconcile-all' })}
+          onUpdateBranch={async (branchId: string, values: any) => { await page.updateBranchMutation.mutateAsync({ branchId, values }); }}
+          onDeleteBranch={async (branch) => { await page.deleteBranchMutation.mutateAsync(branch.id); }}
+          onUpdateLocation={async (locationId: string, values: { name: string; code: string; branchId: string; locationType?: 'internal_warehouse' | 'branch_stock' }) => { await page.updateLocationMutation.mutateAsync({ locationId, values: values as any }); }}
+          onDeleteLocation={async (location) => { await page.deleteLocationMutation.mutateAsync(location.id); }}
+          branchActionBusy={page.updateBranchMutation.isPending || page.deleteBranchMutation.isPending}
+          locationActionBusy={page.updateLocationMutation.isPending || page.deleteLocationMutation.isPending}
+          branchActionError={page.updateBranchMutation.error || page.deleteBranchMutation.error}
+          locationActionError={page.updateLocationMutation.error || page.deleteLocationMutation.error}
+          importProducts={(rows) => page.importProductsMutation.mutateAsync(rows)}
+          importCustomers={(rows) => page.importCustomersMutation.mutateAsync(rows)}
+          importSuppliers={(rows) => page.importSuppliersMutation.mutateAsync(rows)}
+          importOpeningStock={(rows) => page.importOpeningStockMutation.mutateAsync(rows)}
+          downloadTemplate={downloadSettingsTemplate}
+          onExportData={exportSettingsData}
+          onDownloadJson={(data, filename) => downloadJsonFile(data, filename)}
+          setupMode={page.setupMode}
+          setupStepKey={page.setupFlow.currentStep?.key || null}
+          onSetupAdvance={page.handleSetupAdvance}
+        />
+      </SettingsSectionErrorBoundary>
+
+      {page.confirmDialogMeta ? (
+        <ActionConfirmDialog
+          open={Boolean(page.confirmAction)}
+          title={page.confirmDialogMeta.title}
+          description={page.confirmDialogMeta.description}
+          isBusy={page.confirmDialogMeta.isBusy}
+          onCancel={() => page.setConfirmAction(null)}
+          onConfirm={() => void page.performConfirmedAction()}
+        />
+      ) : null}
+    </SettingsPageShell>
+  );
+}

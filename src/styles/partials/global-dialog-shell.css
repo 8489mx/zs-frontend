@@ -1,0 +1,730 @@
+/* Global modal background scroll lock standard */
+html.dialog-shell-open,
+body.dialog-shell-open {
+  overflow: hidden !important;
+  overflow-y: hidden !important;
+}
+
+html.dialog-shell-open #root,
+body.dialog-shell-open #root,
+body.dialog-shell-open .content-wrap,
+body.dialog-shell-open .pos-workspace,
+body.dialog-shell-open .pos-products-scroll,
+body.dialog-shell-open .pos-body {
+  overflow: hidden !important;
+  overflow-y: hidden !important;
+  overscroll-behavior: none !important;
+  touch-action: none !important;
+  pointer-events: none !important;
+}
+
+.dialog-overlay,
+.dialog-shell {
+  pointer-events: auto !important;
+  touch-action: pan-y !important;
+}
+
+/* Global dialog shell positioning
+   Ensures all DialogShell-based popups render as spacious, centered modals with proper breathing room. */
+
+.dialog-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10000 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: max(20px, calc(env(safe-area-inset-top, 0px) + 16px)) 16px max(20px, calc(env(safe-area-inset-bottom, 0px) + 16px)) !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.45);
+  overscroll-behavior: contain;
+  animation: none !important;
+  transition: none !important;
+}
+
+.dialog-shell {
+  position: relative;
+  width: min(720px, calc(100vw - 36px));
+  max-width: calc(100vw - 36px);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain !important;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 25px 60px -12px rgba(15, 23, 42, 0.3), 0 0 1px rgba(0, 0, 0, 0.1);
+  outline: none;
+  animation: none !important;
+  transition: none !important;
+}
+
+.dialog-shell:focus {
+  outline: none;
+}
+
+.dialog-shell-close-btn {
+  display: none !important;
+}
+
+.dialog-shell-close-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.dialog-shell-close-btn:focus-visible {
+  outline: 2px solid var(--primary, #170c5c);
+  outline-offset: 2px;
+}
+
+.dialog-card {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: #ffffff !important;
+  padding: 26px 30px !important;
+}
+
+/* Universal Defensive Modal Padding:
+   Ensures that ANY content rendered inside .dialog-shell NEVER touches the edges or clips,
+   even if no inner wrapper class or padding was manually specified. */
+.dialog-shell > form,
+.dialog-shell > .dialog-content,
+.dialog-shell > .dialog-body,
+.dialog-shell > div:not(.pos-workspace):not(.full-bleed):not(.dialog-card):not(.page-stack):not(.mobile-quick-action-sheet) {
+  padding: 26px 30px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/* Universal 14"-to-32" Compact Modal Standard */
+.dialog-shell.dialog-compact > form,
+.dialog-shell.dialog-compact > .dialog-content,
+.dialog-shell.dialog-compact > .dialog-body,
+.dialog-shell.dialog-compact > .dialog-card,
+.dialog-shell.dialog-compact .user-management-dialog-card,
+.dialog-shell.dialog-compact > div:not(.pos-workspace):not(.full-bleed):not(.page-stack) {
+  padding: 12px 18px !important;
+}
+
+.dialog-shell.dialog-compact .standard-dialog-header {
+  padding-bottom: 8px !important;
+  margin-bottom: 10px !important;
+}
+
+.dialog-shell.dialog-compact .standard-dialog-footer {
+  padding-top: 10px !important;
+  margin-top: 10px !important;
+}
+
+.dialog-shell.dialog-compact .standard-dialog-body {
+  min-height: auto !important;
+  gap: 10px !important;
+}
+
+/* ==========================================================================
+   Universal 10/10 Golden Modal Standard (دستور النوافذ المنبثقة الذهبي الموحد)
+   Guarantees visual breathing room, soft enterprise sections, and zero-scroll.
+   ========================================================================== */
+
+/* Universal field breathing room inside modals */
+.enterprise-compact-modal .field,
+.dialog-shell .field {
+  margin-bottom: 0 !important;
+  gap: 5px !important;
+}
+
+.enterprise-compact-modal .field span,
+.dialog-shell .field span,
+.enterprise-compact-modal .field label,
+.dialog-shell .field label {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: #475569 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Universal input, select & combobox heights */
+.enterprise-compact-modal input,
+.enterprise-compact-modal textarea,
+.dialog-shell.dialog-compact input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.dialog-shell.dialog-compact select {
+  height: 35px !important;
+  font-size: 0.8125rem !important;
+  border-radius: 6px !important;
+  padding: 0 12px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  box-sizing: border-box !important;
+  outline: none !important;
+  width: 100% !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+}
+
+.enterprise-compact-modal textarea,
+.dialog-shell.dialog-compact textarea {
+  height: auto !important;
+  min-height: 60px !important;
+  padding: 8px 12px !important;
+  resize: vertical !important;
+  line-height: 1.5 !important;
+  font-family: inherit !important;
+}
+
+.enterprise-compact-modal input:focus,
+.enterprise-compact-modal textarea:focus,
+.dialog-shell.dialog-compact input:focus,
+.dialog-shell.dialog-compact textarea:focus {
+  border-color: #170e5e !important;
+  box-shadow: 0 0 0 2px rgba(23, 14, 94, 0.1) !important;
+}
+
+.enterprise-compact-modal .custom-select-trigger,
+.dialog-shell.dialog-compact .custom-select-trigger {
+  min-height: 35px !important;
+  height: 35px !important;
+  font-size: 0.8125rem !important;
+  border-radius: 6px !important;
+  border: 1px solid #cbd5e1 !important;
+  padding: 0 10px 0 36px !important;
+}
+
+/* Universal Soft Enterprise Section Boxes */
+.modal-section,
+.enterprise-modal-section,
+.enterprise-compact-modal > div[style*="background"] {
+  background: #fbfcfd !important;
+  border: 1px solid #edf2f7 !important;
+  border-radius: 10px !important;
+  padding: 11px 14px !important;
+}
+
+/* Automatic scaling for standard 14" laptop viewports (height <= 820px or width <= 1366px) */
+@media (max-height: 820px) {
+  .dialog-overlay {
+    padding: 12px 10px !important;
+  }
+  .dialog-shell {
+    max-height: calc(100vh - 24px) !important;
+  }
+  .dialog-shell > form,
+  .dialog-shell > .dialog-content,
+  .dialog-shell > .dialog-body,
+  .dialog-shell > div:not(.pos-workspace):not(.full-bleed):not(.dialog-card):not(.page-stack):not(.mobile-quick-action-sheet) {
+    padding: 14px 18px !important;
+  }
+  .standard-dialog-header {
+    padding-bottom: 8px !important;
+    margin-bottom: 10px !important;
+  }
+  .standard-dialog-footer {
+    padding-top: 10px !important;
+    margin-top: 10px !important;
+  }
+  .standard-dialog-title {
+    font-size: 0.95rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .standard-dialog-subtitle {
+    font-size: 0.74rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+}
+
+/* Standard Dialog Components & Classes */
+.standard-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid #e2e8f0;
+  width: 100%;
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.standard-dialog-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.standard-dialog-title {
+  margin: 0;
+  font-size: clamp(0.92rem, 3.8vw, 1.125rem);
+  font-weight: 800;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.standard-dialog-title::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 18px;
+  background: var(--primary, #170c5c);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.standard-dialog-subtitle {
+  margin: 0;
+  padding-inline-start: 12px;
+  font-size: clamp(0.72rem, 2.9vw, 0.82rem);
+  color: #64748b;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.standard-dialog-close-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.standard-dialog-close-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+
+.standard-dialog-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 280px;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Universal Anti-Ballooning & Sticky Table Rules for all Popups */
+.standard-dialog-body table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.standard-dialog-body thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: #f8fafc;
+}
+
+/* Universal scrollable table wrapper */
+.modal-table-container,
+.standard-dialog-body .table-wrapper,
+.standard-dialog-body [data-table-container] {
+  flex: 1;
+  min-height: 280px;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+}
+
+.standard-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  margin-top: 20px;
+  border-top: 1px solid #e2e8f0;
+  width: 100%;
+}
+
+.standard-dialog-footer .standard-dialog-footer {
+  border-top: none !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  width: 100% !important;
+}
+
+.dialog-description {
+  line-height: 1.8;
+}
+
+/* Ensure modal content spreads 100% across the full width */
+.dialog-shell .document-prototype-section-header,
+.dialog-shell .dialog-card > div:first-child {
+  padding-inline-end: 0 !important;
+  width: 100% !important;
+}
+
+.dialog-shell .document-prototype-section-actions {
+  margin-inline-end: 0 !important;
+}
+
+/* Signature vertical colored bar on ALL modal dialog titles */
+.dialog-shell h3,
+.dialog-shell .document-prototype-section-title {
+  align-items: center;
+  color: #0f172a;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  font-family: inherit;
+  font-size: 1.15rem;
+  font-weight: 800;
+  gap: 10px;
+  letter-spacing: 0;
+  line-height: 1.35;
+  margin: 0 0 4px 0;
+}
+
+.dialog-shell h3::before,
+.dialog-shell .document-prototype-section-title::before {
+  background: var(--primary, #170c5c);
+  border-radius: 8px;
+  content: "";
+  flex: none;
+  height: 22px;
+  width: 4px;
+}
+
+/* Prevent duplicate / redundant pseudo bars when an explicit bar, icon, or unified shell already exists */
+.dialog-shell .pos-restaurant-unified-shell h3::before,
+.pos-restaurant-unified-shell h3::before,
+.dialog-shell h3.no-pseudo-bar::before,
+.dialog-shell .no-pseudo-bar::before,
+.no-pseudo-bar::before {
+  display: none !important;
+  content: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.dialog-shell p.muted,
+.dialog-shell p.text-muted-foreground,
+.dialog-shell .dialog-description {
+  margin: 0;
+  padding-inline-start: 14px;
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* Eliminate nested inner boxes inside dialogs for a clean, spacious look */
+.dialog-shell .document-prototype-section {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+}
+
+.dialog-shell .form-grid {
+  gap: 16px 20px;
+}
+
+@media (max-width: 640px) {
+  .dialog-overlay {
+    align-items: flex-start;
+    padding-top: max(env(safe-area-inset-top, 0px) + 28px, 48px) !important;
+    padding-bottom: max(env(safe-area-inset-bottom, 0px) + 24px, 24px) !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .dialog-shell {
+    width: calc(100vw - 20px);
+    max-width: calc(100vw - 20px);
+    max-height: calc(100vh - max(env(safe-area-inset-top, 0px) + 60px, 80px));
+    border-radius: 16px;
+  }
+
+  .dialog-card,
+  .dialog-shell > form,
+  .dialog-shell > .dialog-content,
+  .dialog-shell > .dialog-body,
+  .dialog-shell > div:not(.pos-workspace):not(.full-bleed):not(.dialog-card):not(.page-stack):not(.mobile-quick-action-sheet) {
+    padding: 18px 16px !important;
+  }
+}
+
+/* Comfortable spacing for DialogShell screens that render page content directly. */
+.dialog-shell > .page-stack {
+  padding: 26px 30px;
+}
+
+.dialog-shell .section-title h3 {
+  line-height: 1.45;
+  padding-block: 2px;
+}
+
+.dialog-shell .section-description {
+  line-height: 1.75;
+}
+
+@media (max-width: 640px) {
+  .dialog-shell > .page-stack {
+    padding: 18px 16px;
+  }
+}
+
+/* ==========================================================================
+   Universal System Toast Notification Framework (Zero-Alert Standard)
+   ========================================================================== */
+
+.system-toast-container {
+  position: fixed !important;
+  top: max(20px, calc(env(safe-area-inset-top, 0px) + 12px)) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 100000 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  align-items: center !important;
+  pointer-events: none !important;
+  width: min(500px, calc(100vw - 32px)) !important;
+}
+
+.system-toast-card {
+  pointer-events: auto !important;
+  width: 100% !important;
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.06) !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+  animation: systemToastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  transition: opacity 0.2s ease, transform 0.2s ease !important;
+  direction: inherit;
+  text-align: start !important;
+}
+
+.system-toast-card.toast-success {
+  border-inline-start: 4px solid #059669 !important;
+}
+
+.system-toast-card.toast-error {
+  border-inline-start: 4px solid #dc2626 !important;
+}
+
+.system-toast-card.toast-warning {
+  border-inline-start: 4px solid #d97706 !important;
+}
+
+.system-toast-card.toast-info {
+  border-inline-start: 4px solid #170e5e !important;
+}
+
+.system-toast-icon-wrapper {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+
+.system-toast-icon-wrapper.icon-success {
+  background-color: #ecfdf5 !important;
+  color: #059669 !important;
+}
+
+.system-toast-icon-wrapper.icon-error {
+  background-color: #fef2f2 !important;
+  color: #dc2626 !important;
+}
+
+.system-toast-icon-wrapper.icon-warning {
+  background-color: #fffbeb !important;
+  color: #d97706 !important;
+}
+
+.system-toast-icon-wrapper.icon-info {
+  background-color: #f1f5f9 !important;
+  color: #170e5e !important;
+}
+
+.system-toast-body {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+
+.system-toast-title {
+  margin: 0 !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+}
+
+.system-toast-message {
+  margin: 0 !important;
+  font-size: 0.8125rem !important;
+  color: #334155 !important;
+  line-height: 1.5 !important;
+}
+
+.system-toast-close-btn {
+  background: transparent !important;
+  border: none !important;
+  color: #94a3b8 !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: color 0.15s, background-color 0.15s !important;
+  flex-shrink: 0 !important;
+}
+
+.system-toast-close-btn:hover {
+  color: #0f172a !important;
+  background-color: #f1f5f9 !important;
+}
+
+@keyframes systemToastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* POS Restaurant Operations Hub Zero-Scroll Modal Standard */
+.dialog-shell.pos-restaurant-ops-shell {
+  overflow: hidden !important;
+  overflow-y: hidden !important;
+  max-height: calc(100vh - 24px) !important;
+  padding: 0 !important;
+}
+
+.dialog-shell.pos-restaurant-ops-shell > div {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* POS Unified Restaurant Operations Workstation Standard (Strict Fixed Canvas) */
+.dialog-shell.pos-restaurant-unified-shell {
+  width: min(1060px, calc(100vw - 32px)) !important;
+  max-width: min(1060px, calc(100vw - 32px)) !important;
+  height: min(580px, calc(100vh - 32px)) !important;
+  min-height: min(580px, calc(100vh - 32px)) !important;
+  max-height: min(580px, calc(100vh - 32px)) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 25px 60px -12px rgba(15, 23, 42, 0.35) !important;
+}
+
+.dialog-shell.pos-restaurant-unified-shell > div {
+  padding: 0 !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Mobile Quick Action Dialog Shell */
+.dialog-shell.mobile-quick-action-dialog {
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.dialog-shell.mobile-quick-action-dialog > div {
+  padding: 0 !important;
+}
+
+/* POS UI Customization Dialog Controls Protection */
+.pos-custom-toggle {
+  min-height: 24px !important;
+  max-height: 24px !important;
+  height: 24px !important;
+  min-width: 42px !important;
+  max-width: 42px !important;
+  width: 42px !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+  border: none !important;
+}
+
+.pos-customization-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+  padding-top: 10px !important;
+  margin-top: 10px !important;
+  border-top: 1px solid #f1f5f9 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+}
+
+.pos-customization-footer .btn {
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  box-sizing: border-box !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+.pos-customization-dialog-container {
+  display: flex !important;
+  flex-direction: column !important;
+  height: min(86vh, 660px) !important;
+  max-height: 86vh !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.pos-customization-dialog-body {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  overscroll-behavior: contain !important;
+}
+
+
+
+

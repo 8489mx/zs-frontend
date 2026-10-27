@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Z-ERP Enterprise</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background-color: #f8fafc;
+      background-image: radial-gradient(at 50% 0%, #ffffff 0%, #f1f5f9 65%, #e2e8f0 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans Arabic', 'Cairo', sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      user-select: none;
+      -webkit-user-select: none;
+      position: relative;
+    }
+
+    /* Subtle Top Enterprise Accent Bar */
+    .top-accent-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #170e5e 0%, #2563eb 50%, #170e5e 100%);
+      z-index: 20;
+    }
+
+    /* Crisp Enterprise Card */
+    .card {
+      position: relative;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 42px 44px 34px;
+      text-align: center;
+      box-shadow: 
+        0 1px 3px 0 rgba(15, 23, 42, 0.04),
+        0 10px 30px -5px rgba(15, 23, 42, 0.08),
+        0 0 0 1px rgba(15, 23, 42, 0.02);
+      width: 480px;
+      max-width: 92vw;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      animation: cardFadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      z-index: 10;
+    }
+
+    @keyframes cardFadeIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.99); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Enterprise Logo Badge */
+    .logo-container {
+      margin-bottom: 20px;
+    }
+
+    .logo-box {
+      width: 78px;
+      height: 78px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 18px;
+      box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.06);
+    }
+
+    .logo-svg {
+      width: 46px;
+      height: 46px;
+    }
+
+    .title {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #64748b;
+      margin-bottom: 28px;
+      line-height: 1.4;
+    }
+
+    /* Progress Section */
+    .progress-section {
+      width: 100%;
+      margin-bottom: 16px;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding: 0 2px;
+    }
+
+    .progress-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #475569;
+    }
+
+    .progress-percent {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #170e5e;
+      font-family: 'JetBrains Mono', monospace, -apple-system, sans-serif;
+      background: #f1f5f9;
+      padding: 2px 9px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 7px;
+      background: #f1f5f9;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid #e2e8f0;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 15%;
+      background: linear-gradient(90deg, #170e5e 0%, #2563eb 100%);
+      border-radius: 999px;
+      transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+
+    .progress-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      animation: shimmer 1.8s infinite ease-in-out;
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .status-box {
+      width: 100%;
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .status-text {
+      font-size: 0.8125rem;
+      color: #64748b;
+      font-weight: 500;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      transition: opacity 0.2s ease, color 0.2s ease;
+    }
+
+    .status-text.done {
+      color: #059669;
+      font-weight: 600;
+    }
+
+    /* Card Footer Partition */
+    .card-footer {
+      width: 100%;
+      border-top: 1px solid #f1f5f9;
+      margin-top: 22px;
+      padding-top: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-brand {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      direction: ltr;
+      unicode-bidi: isolate;
+    }
+
+    .footer-brand span {
+      color: #170e5e;
+      font-weight: 700;
+    }
+
+    .version-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #475569;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 3px 10px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .version-dot {
+      width: 6px;
+      height: 6px;
+      background: #10b981;
+      border-radius: 50%;
+      display: inline-block;
+      animation: pulseDot 2.2s ease-in-out infinite;
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.92); }
+    }
+
+    /* Screen Bottom Credit */
+    .screen-credit {
+      position: fixed;
+      bottom: 18px;
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: #94a3b8;
+      letter-spacing: 0.02em;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-accent-bar"></div>
+
+  <div class="card">
+    <div class="logo-container">
+      <div class="logo-box">
+        <svg class="logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="zEmblemGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#170e5e"/>
+              <stop offset="65%" stop-color="#1e1b4b"/>
+              <stop offset="100%" stop-color="#2563eb"/>
+            </linearGradient>
+          </defs>
+          <path d="M 22 22 H 78 L 46 72 H 78 V 84 H 22 L 54 34 H 22 Z" fill="url(#zEmblemGrad)" />
+        </svg>
+      </div>
+    </div>
+
+    <div class="title">Z-ERP Enterprise</div>
+    <div class="subtitle">منظومة إدارة المبيعات ونقاط التشغيل والمخازن</div>
+
+    <div class="progress-section">
+      <div class="progress-header">
+        <span class="progress-label">تهيئة المنظومة</span>
+        <span class="progress-percent" id="progressPercent">15%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressBar"></div>
+      </div>
+    </div>
+
+    <div class="status-box">
+      <div class="status-text" id="statusText">جاري تشغيل محرك قواعد البيانات والخدمات المحلية...</div>
+    </div>
+
+    <div class="card-footer">
+      <div class="version-badge" id="versionBadge">
+        <span class="version-dot"></span>
+        <span id="versionText">نظام مؤمن • v1.1.31</span>
+      </div>
+      <div class="footer-brand" dir="ltr">
+        Powered by <span>Z-Systems</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen-credit">
+    منظومة Z-Systems المؤسسية • الإصدار المعتمد
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    let ver = urlParams.get('v');
+    try {
+      const cached = localStorage.getItem('zs.app_display_version');
+      if (cached) ver = cached;
+    } catch (e) {}
+    if (ver) {
+      document.getElementById('versionText').textContent = 'نظام مؤمن • v' + ver.replace(/^v/i, '');
+    }
+    async function updateVersionFromBackend() {
+      for (const p of [3001, 3002, 3003, 3004, 3005, 3101]) {
+        try {
+          const res = await fetch('http://127.0.0.1:' + p + '/api/updates/version');
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.version) {
+              document.getElementById('versionText').textContent = 'نظام مؤمن • v' + data.version.replace(/^v/i, '');
+              try { localStorage.setItem('zs.app_display_version', data.version); } catch (e) {}
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    updateVersionFromBackend();
+    const verInterval = setInterval(updateVersionFromBackend, 600);
+    setTimeout(() => clearInterval(verInterval), 8000);
+    
+    const bar = document.getElementById('progressBar');
+    const percentEl = document.getElementById('progressPercent');
+    const statusText = document.getElementById('statusText');
+
+    let currentPct = 15;
+    let animFrameId = null;
+
+    function animatePercentTo(targetPct, duration = 400) {
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      const startPct = currentPct;
+      const startTime = performance.now();
+
+      function update(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3);
+        currentPct = Math.round(startPct + (targetPct - startPct) * ease);
+        if (percentEl) percentEl.textContent = currentPct + '%';
+        if (progress < 1) {
+          animFrameId = requestAnimationFrame(update);
+        } else {
+          currentPct = targetPct;
+          if (percentEl) percentEl.textContent = targetPct + '%';
+        }
+      }
+      animFrameId = requestAnimationFrame(update);
+    }
+
+    const steps = [
+      { pct: 25, text: 'جاري تشغيل محرك قواعد البيانات والخدمات المحلية...', delay: 200 },
+      { pct: 55, text: 'التحقق من سلامة البيانات والتراخيص المعتمدة...', delay: 1000 },
+      { pct: 85, text: 'تجهيز واجهات نقطة البيع وتهيئة بيئة العمل...', delay: 1900 },
+      { pct: 100, text: 'اكتمل الإقلاع بنجاح • جاري فتح المنظومة...', delay: 2700, isDone: true },
+    ];
+    steps.forEach(s => {
+      setTimeout(() => {
+        if (bar) bar.style.width = s.pct + '%';
+        animatePercentTo(s.pct, 420);
+        if (statusText) {
+          statusText.style.opacity = '0';
+          setTimeout(() => {
+            statusText.textContent = s.text;
+            if (s.isDone) {
+              statusText.classList.add('done');
+            }
+            statusText.style.opacity = '1';
+          }, 120);
+        }
+      }, s.delay);
+    });
+  </script>
+</body>
+</html>
